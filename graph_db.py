@@ -127,17 +127,6 @@ class GraphManager:
         top = self.session.run(TOPIC_NODE.format(t=topic, c=self.group))
         top = self.print_log(top)
 
-        # Does Topic node have count for this Group?
-        count_property = 'top.' + self.group
-        print(count_property + topic)
-        if count_property in top[0]:
-            print("found it")
-        else:
-            print("no bueno")
-
-
-
-
     def grouping(self):
         grp = self.session.run(GROUP_NODE.format(g=self.group))
         self.print_log(grp)
