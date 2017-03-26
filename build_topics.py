@@ -18,17 +18,15 @@ NOUNS = {ss.NOUN, ss.PROPN, ss.PRON}
 class TopicBuilder:
     nlp = spacy.load('en')
 
-
     def __init__(self, source):
         """
         :param source: The name of the source (e.g., 20170101, Mat1)
         """
         self.source = source
         self.gt = graph_db.GraphManager(source)
-        # self.gt.source = source.lower().replace(' ', '')
-        # self.gt.source(source)
+        self.gt.grouping()
 
-    def _tokenizer(self):
+    # def _tokenizer(self):
         """
         Tokenize the text that we're studying.
         """
@@ -49,7 +47,7 @@ class TopicBuilder:
         Start with a token, find it's explanatory phrase. Then create Topic and Phrase nodes.  Then link those 
         together and to Post nodes.
         :param token: A noun, pronoun, or proper noun; the topic
-        :param source_type: "POST" or "PHRASE"
+        :param source_type: "SOURCE" or "PHRASE"
         :param source_key: A unique string representation of the source
         :param skip_ahead: All words before this index (token.i) have been addressed; avoids double-counting and loops 
         :return: The new skip_ahead value
@@ -58,17 +56,17 @@ class TopicBuilder:
         # Create Topic node; use the token lemma as the key.
         topic = token.lemma_
         self.gt.topic(topic)
-        self.gt.source_to_topic(self.source, topic)
+        self.gt.group_to_topic(self.source, topic)
 
         # Get the subtree of the token.
         subtree = list(token.subtree)
 
-        # If the Topic and Subtree Phrase are equal, write the topic and link it to the post.
+        # If the Topic and Subtree Phrase are equal, write the topic and link it to the source.
         if len(subtree) == 1:
             if source_type == "PHRASE":
                 self.gt.phrase_to_topic(source_key, topic)
-            else:  # source is POST
-                self.gt.post_to_topic(source_key, topic)
+            else:  # source is SOURCE
+                self.gt.source_to_topic(source_key, topic)
 
         # The Subtree Phrase is bigger than the Topic. Create the Phrase, then save to the db and link
         else:
@@ -82,8 +80,8 @@ class TopicBuilder:
 
             if source_type == "PHRASE":
                 self.gt.phrase_to_phrase(source_key, phrase)
-            else:  # source is POST
-                self.gt.post_to_phrase(source_key, phrase)
+            else:  # source is SOURCE
+                self.gt.source_to_phrase(source_key, phrase)
 
             # Are there additional nouns in the Subtree? Loop through them and call this method recursively.
             nouns = [word for word in subtree if word.pos in NOUNS and word.i > skip_ahead]
@@ -106,4 +104,4 @@ class TopicBuilder:
             tokens = [word for word in self.nlp(texts[reference])]
             for token in tokens:
                 if token.pos in NOUNS and token.i > skip_ahead:
-                    skip_ahead = self.analyze_phrases(token, "POST", reference, skip_ahead)
+                    skip_ahead = self.analyze_phrases(token, "SOURCE", reference, skip_ahead)

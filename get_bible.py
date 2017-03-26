@@ -54,8 +54,8 @@ def db_add_posts(posts, db_start_fresh=False):
         gt.delete_all()
 
     for reference in posts:
-        gt.post(reference, posts[reference])
-    gt.close()
+        gt.source(reference, posts[reference])
+    # gt.close()
 
 
 if __name__ == "__main__":
