@@ -1,18 +1,1 @@
-
-# IMPORTS
-import get_bible
-import build_topics
-
-# GLOBALS
-
-chapter1 = "Mat 1"
-posts = get_bible.main(chapter1)
-get_bible.db_add_posts(posts, db_start_fresh=True)
-tb = build_topics.TopicBuilder(chapter1)
-tb.find_phrases(posts)
-
-chapter2 = "Mat 2"
-posts = get_bible.main(chapter2)
-get_bible.db_add_posts(posts, db_start_fresh=False)
-tb = build_topics.TopicBuilder(chapter2)
-tb.find_phrases(posts)
+"""Running this file makes all of the key stuff happen."""# TODO: How do I let users choose which options to output simply?# TODO: Add option for users who don't have neo4j installed.# TODO: Create a very simple raw dictionary file for input as an example.# TODO: Add a C/H getter# IMPORTSimport get_bibleimport ana_topicsimport ana_factory# GLOBALSNEW_CORPUS = "Mat 4"ORIG_CORPUS = "Mat 3"def main(new_corpus_name, orig_corpus_name=""):    """    Do standard analysis on a corpus (new_corpus), including comparing it with an original     :param new_corpus_name: (str) A string description of the "new" corpus (the one where we'll do more detailed        analysis) used by the get_ class to get a corpus. (See the class for specific requirements.)    :param orig_corpus_name: (str) An optional string description used by the get_ class to get a corpus. (See the         class for specific requirements.) Compare will only occur if this value is populated.     :return:     """    # Analyze the new corpus -- the primary focus of our study    new_texts = get_bible.main(new_corpus_name)  # Get properly formatted corpus (dictionary: { reference: text })    get_bible.db_add_posts(new_texts, db_start_fresh=False)  # Add    #new_tb = ana_topics.TopicBuilder(new_corpus_name)    #new_topics = new_tb.find_nouns(new_texts)    ana = ana_factory.AnalyticsFactory(new_texts, new_corpus_name)    ana.find_top_sentence()    ana.find_top_words()    ana.build_word2vec()    ana.export_json()    # Analyze the original corpus -- optional, and used for comparison purposes only    if orig_corpus_name:        orig_texts = get_bible.main(orig_corpus_name)        get_bible.db_add_posts(orig_texts, db_start_fresh=True)        orig_tb = ana_topics.TopicBuilder(orig_corpus_name)        orig_topics = orig_tb.find_nouns(orig_texts)        new_tb.compare(orig_topics)  # note: based on the    #new_tb.json_export()if __name__ == "__main__":    main(NEW_CORPUS)
