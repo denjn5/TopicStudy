@@ -1,0 +1,18 @@
+[{"run_date": "2017-04-02 20:44", "corpus_name": "Mat 4"}, {
+  "new_topics_expanded": [
+    ["jesus", 7, 0.079, "COMP"], ["thou", 6, 0.067, "COMP"], ["devil", 5, 0.056, "COMP"], ["god", 5, 0.056, "COMP"],
+    ["galilee", 5, 0.056, "COMP"], ["sea", 4, 0.045, "COMP"], ["people", 4, 0.045, "COMP"],
+    ["brother", 4, 0.045, "COMP"], ["son", 3, 0.034, "COMP"], ["kingdom", 3, 0.034, "COMP"], ["net", 3, 0.034, "COMP"],
+    ["stone", 2, 0.022, "COMP"], ["bread", 2, 0.022, "COMP"], ["man", 2, 0.022, "COMP"], ["saith", 2, 0.022, "COMP"],
+    ["angel", 2, 0.022, "COMP"], ["hand", 2, 0.022, "COMP"], ["time", 2, 0.022, "COMP"], ["lord", 2, 0.022, "COMP"],
+    ["john", 2, 0.022, "COMP"], ["zabulon", 2, 0.022, "COMP"], ["nephthalim", 2, 0.022, "COMP"],
+    ["land", 2, 0.022, "COMP"], ["jordan", 2, 0.022, "COMP"], ["light", 2, 0.022, "COMP"], ["fisher", 2, 0.022, "COMP"],
+    ["zebedee", 2, 0.022, "COMP"], ["ship", 2, 0.022, "COMP"], ["father", 2, 0.022, "COMP"],
+    ["manner", 2, 0.022, "COMP"], ["disease", 2, 0.022, "COMP"]
+  ], "intersect_topics_expanded": [], "new_comp_topics": [
+    "net", "fisher", "angel", "time", "john", "god", "kingdom", "galilee", "brother", "ship", "jesus", "land",
+    "zebedee", "son", "bread", "thou", "disease", "man", "manner", "nephthalim", "father", "saith", "light", "stone",
+    "hand", "people", "devil", "lord", "zabulon", "sea", "jordan"
+  ], "new_sum": 89, "orig_sum": 0, "intersect_pct": 0.0, "new_comp_pct": 1.0
+}
+]
