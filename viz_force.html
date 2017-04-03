@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<meta charset="utf-8">
+<head>
+    <meta charset="UTF-8">
+    <title>Key Word Vector Force Diagram</title>
+
+
+<style>
+
+.links line {
+  stroke: #999;
+  stroke-opacity: 0.6;
+}
+
+.nodes circle {
+  stroke: #fff;
+  stroke-width: 1.5px;
+}
+
+.text { /* centers text in node */
+    text-anchor: middle;
+    alignment-baseline: central;
+    pointer-events: none;
+    transform: translateY(1%); /* Firefox */
+}
+
+</style>
+</head>
+<body>
+<svg width="500" height="500"></svg>
+<script src="External/d3.v4.js"></script>
+<script>
+
+var svg = d3.select("svg"),
+    width = +svg.attr("width"),
+    height = +svg.attr("height");
+
+var color = d3.scaleLinear().domain([1,25,50]).range(["red","gray","blue"]);
+
+var simulation = d3.forceSimulation()
+    .force("link", d3.forceLink()
+        .id(function(d) { return d.id; })
+        .distance(function(d) {return (-d.value + 100);})
+        .strength(0.01))
+    .force("charge", d3.forceManyBody())
+    .force("collide",d3.forceCollide( function(d){ return d.count * 3 }) )
+    .force("center", d3.forceCenter(width / 2, height / 2));
+
+d3.json("Models/top.json", function(error, graph) {
+    if (error) throw error;
+
+    var link = svg.append("g")
+        .attr("class", "links")
+        .selectAll("line")
+        .data(graph.links)
+        .enter().append("line")
+        .attr("stroke-width", function(d) { return Math.sqrt(d.value); });
+
+    var node = svg.selectAll(".node")
+        .data(graph.nodes)
+        .enter().append("g")
+        .attr("class", "node")
+        .call(d3.drag()
+            .on("start", dragstarted)
+            .on("drag", dragged)
+            .on("end", dragended));
+
+    node.append("circle")
+        .attr("r", function(d){  return d.count * 3 })
+        .attr("fill", function(d) { return color(d.rank); })
+
+    node.append("text")
+        .attr("dx", 12)
+        .attr("dy", ".35em")
+        .text(function(d) { return d.id })
+        .style("text-anchor", "right")
+        .style("fill", "#555")
+        .style("font-family", "Arial")
+        .style("font-size", 12);
+
+    simulation
+        .nodes(graph.nodes)
+        .on("tick", ticked);
+
+    simulation.force("link")
+        .links(graph.links);
+
+    function ticked() {
+        link
+            .attr("x1", function(d) { return d.source.x; })
+            .attr("y1", function(d) { return d.source.y; })
+            .attr("x2", function(d) { return d.target.x; })
+            .attr("y2", function(d) { return d.target.y; });
+
+        /*node
+            .attr("cx", function(d) { return d.x; })
+            .attr("cy", function(d) { return d.y; });   */
+
+        node.attr("transform", function(d) { return "translate(" + d.x + "," + d.y + ")"; });
+    }
+});
+
+function dragstarted(d) {
+    if (!d3.event.active) simulation.alphaTarget(0.3).restart();
+    d.fx = d.x;
+    d.fy = d.y;
+}
+
+function dragged(d) {
+    d.fx = d3.event.x;
+    d.fy = d3.event.y;
+}
+
+function dragended(d) {
+    if (!d3.event.active) simulation.alphaTarget(0);
+    d.fx = null;
+    d.fy = null;
+}
+
+</script>
+</body>
+</html>

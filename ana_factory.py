@@ -45,7 +45,7 @@ class AnalyticsFactory:
         :param texts: The texts that we want to analyze.
         :param corpus_name: The differentiating file name for saving/retrieving
         """
-        self.corpus_name = corpus_name
+        self.corpus_name = corpus_name.replace(' ', '')
         self.texts = texts
         self.words = []
         self.links = []
@@ -146,7 +146,7 @@ class AnalyticsFactory:
         # SAVE JSON (twice)
         json_content = {'model_settings': self.model_sets, 'nodes': nodes, 'links': j_links,
                         'top_sentence': self.summary_sent, 'noun_profile': self.noun_profile}
-        with open(OUTPUT_DIR + 'top.json', 'w') as f:
+        with open(OUTPUT_DIR + 'analysis_' + self.corpus_name + '.json', 'w') as f:
             json.dump(json_content, f)
 
         return json_content

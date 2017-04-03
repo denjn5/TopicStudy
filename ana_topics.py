@@ -34,7 +34,7 @@ class TopicBuilder:
         :param corpus: (dict) A dictionary of texts that make up this corpus.
         :param use_graph_db: (bool) Is neo4j installed?
         """
-        self.corpus_name = corpus_name  # (str) The name of the set (or corpus) of texts.
+        self.corpus_name = corpus_name.replace(' ', '')  # (str) The name of the set (or corpus) of texts.
         self.corpus_raw = corpus            # (dict) {[reference]: [raw text sent in for analysis]}
         self.corpus_tokens = {}                # (dict) {[reference]: [spaCy tokenized texts]}
         self.corpus_clean_tokens = {}          # (dict) {[reference]: [cleaned up version of tokens]}
