@@ -47,54 +47,27 @@ class AnalyticsFactory:
         """
         self.corpus_name = corpus_name
         self.texts = texts
-        self._tokenizer()
-        clean_token_count = sum([len(sent) for sent in self.clean_tokens])
+        self.words = []
+        self.links = []
+        self.noun_profile = []
 
         now = datetime.datetime.now()
-        self.model_sets.append({'run_date': now.strftime("%Y-%m-%d %H:%M"), 'corpus_name': self.corpus_name,
-                                'clean_token_count': clean_token_count})
+        self.model_sets = [{'run_date': now.strftime("%Y-%m-%d %H:%M"), 'corpus_name': self.corpus_name}]
 
 
-    def _tokenizer(self):
-        """
-        Tokenize the texts that we're studying.
-        """
-        # self.doc = nlp(self.texts)
-        #self.tokens = [[word for word in sent] for sent in self.doc.sents]
-
-        self.tokens = []
-        self.raw = ""
-        for reference in self.texts:
-            # TODO: Improve text split to remove stopwords
-            self.tokens.append(self.texts[reference].split())
-            self.raw += self.texts[reference] + ' '
-
-
-        # STOP WORDS
-        with open(TEXTS_DIR + 'stopwords.txt', 'r') as file:
-            stopwords = set(file.read().split(' '))
-
-        # PARSE & CLEAN: lowercase; lemmatize; eliminate stopwords, punctuation, numbers
-        # self.clean_tokens = [[str(word.lemma_).lower() for word in sent
-        #                       if (str(word).lower() not in stopwords) and word.is_alpha]  # str(word).isalpha()
-        #                      for sent in self.tokens]  # eliminate single-use words?
-        # self.clean_tokens = [s for s in self.clean_tokens if s]  # remove empty sentences
-        # self.clean_text = ' '.join([' '.join([str(c) for c in lst]) for lst in self.clean_tokens])
-
-
-    def find_top_words(self, top_word_count=5):
+    def keywords(self, raw, word_count=5):
         """
         Find teh top n words in the texts based on Gensim's model.
-        :param top_word_count: How many words to find?
+        :param word_count: How many words to find?
         :return: The top n words as a set.
         """
         # TODO: texts vs clean_text?
-        summary_words = gensim.summarization.keywords(self.raw, words=top_word_count)
+        summary_words = gensim.summarization.keywords(raw, words=word_count)
         self.top_words = set(summary_words.split('\n'))  # transform string of words to a set.
 
         return self.top_words
 
-    def find_top_sentence(self, sentence_ratio=None):
+    def key_sentence(self, raw, sentence_ratio=None):
         """
         Returns the best summary sentence based on Gensim's model.
         By default, we return the single best sentence. Use sentence_ratio to ask for a larger chunk.
@@ -104,7 +77,7 @@ class AnalyticsFactory:
 
         for ss_ratio in (sentence_ratio if sentence_ratio else range(2, 100, 1)):
             # ss_ratio = sentence_ratio if sentence_ratio else 20 / len(self.texts.split(' '))
-            self.summary_sent = gensim.summarization.summarize(self.raw, ratio=(ss_ratio / 100))  # split=True?
+            self.summary_sent = gensim.summarization.summarize(raw, ratio=(ss_ratio / 100))  # split=True?
             if sentence_ratio or len(self.summary_sent) > 0:
                 sentence_ratio = ss_ratio
                 break
@@ -112,11 +85,12 @@ class AnalyticsFactory:
         self.model_sets.append({'top_sentence_ratio': sentence_ratio})
         return self.summary_sent
 
-    def build_word2vec(self, size=100, window=5, min_count=3, sg=0, max_words=100, min_link=0.1, pickle=False):
+    def build_word2vec(self, tokens, size=100, window=5, min_count=3, sg=0, max_words=100, min_link=0.1, pickle=False):
         """
         Train a Word2Vec model.
         Note: The "you must first build vocabulary before training the model" usually means that you haven't provided
-        a properly tokenized texts to the Word2Vec model.
+        a properly tokenized texts to the Word2Vec model. Be sure to remove stopwords.
+            tokens = [['first', 'sentence'], ['second', 'sentence']]
         :param size: How many training nodes? Probably min 100, but could go much higher (it'll take longer).
         :param window: How many words on either side of word in question.
         :param min_count: The minimum number of times a word can appear in texts and still be included.
@@ -127,7 +101,7 @@ class AnalyticsFactory:
 
         # WORD2VEC: create model
         #tokens_str = [[str(word) for word in sent] for sent in self.clean_tokens]
-        w2v = gensim.models.Word2Vec(self.tokens, size=size, window=window, min_count=min_count, sg=sg, workers=4)
+        w2v = gensim.models.Word2Vec(tokens, size=size, window=window, min_count=min_count, sg=sg, workers=4)
 
         w2v.init_sims(replace=True)  # No further training?
         if pickle:

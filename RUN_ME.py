@@ -12,41 +12,41 @@ import ana_topics
 import ana_factory
 
 # GLOBALS
-NEW_CORPUS = "Mat 4"
-ORIG_CORPUS = "Mat 3"
+# TODO: Handle globals consistently: either jump into middle or pass through as properties. Prob'ly that one.
+NEW_CORPUS = "Mat 4"  # (str) The corpus where we'll do detailed analysis; formatting may be critical for get_.
+ORIG_CORPUS = "Mat 3"  # (str) An optional corpus (used for comparison); formatting may be critical for get_.
+
+USE_GRAPH_DB = False
 
 
-def main(new_corpus_name, orig_corpus_name=""):
-    """
-    Do standard analysis on a corpus (new_corpus), including comparing it with an original 
-    :param new_corpus_name: (str) A string description of the "new" corpus (the one where we'll do more detailed
-        analysis) used by the get_ class to get a corpus. (See the class for specific requirements.)
-    :param orig_corpus_name: (str) An optional string description used by the get_ class to get a corpus. (See the 
-        class for specific requirements.) Compare will only occur if this value is populated. 
-    :return: 
-    """
+# RUN
+# Get the Corpus
+new_texts = get_bible.main(NEW_CORPUS)  # Get properly formatted corpus (dictionary: { reference: text })
+get_bible.db_add_posts(new_texts, db_start_fresh=False)
 
-    # Analyze the new corpus -- the primary focus of our study
-    new_texts = get_bible.main(new_corpus_name)  # Get properly formatted corpus (dictionary: { reference: text })
-    get_bible.db_add_posts(new_texts, db_start_fresh=False)  # Add
-    #new_tb = ana_topics.TopicBuilder(new_corpus_name)
-    #new_topics = new_tb.find_nouns(new_texts)
+# Run it through Topic Builder (tokenizer, graph db set up, find topics)
+new_tb = ana_topics.TopicBuilder(NEW_CORPUS, new_texts, USE_GRAPH_DB)
+new_tb.tokenize()
+new_topics = new_tb.find_nouns()
 
-    ana = ana_factory.AnalyticsFactory(new_texts, new_corpus_name)
-    ana.find_top_sentence()
-    ana.find_top_words()
-    ana.build_word2vec()
-    ana.export_json()
+# Word2Vec; find key sentences, and key words.
+ana = ana_factory.AnalyticsFactory(new_texts, NEW_CORPUS)
+ana.key_sentence(new_tb.raw)
+ana.keywords(new_tb.raw)
+ana.build_word2vec(new_tb.tokens_clean)
+ana.export_json()
 
-    # Analyze the original corpus -- optional, and used for comparison purposes only
-    if orig_corpus_name:
-        orig_texts = get_bible.main(orig_corpus_name)
-        get_bible.db_add_posts(orig_texts, db_start_fresh=True)
-        orig_tb = ana_topics.TopicBuilder(orig_corpus_name)
-        orig_topics = orig_tb.find_nouns(orig_texts)
-        new_tb.compare(orig_topics)  # note: based on the
+# Compare with original Corpus.
+if ORIG_CORPUS:
+    # Get the Corpus
+    orig_texts = get_bible.main(ORIG_CORPUS)
+    get_bible.db_add_posts(orig_texts, db_start_fresh=True)
 
-    #new_tb.json_export()
+    # Run it through Topic Builder (tokenizer, graph db set up, find topics)
+    orig_tb = ana_topics.TopicBuilder(ORIG_CORPUS, orig_texts, use_graph_db=False)
+    orig_topics = orig_tb.find_nouns()
 
-if __name__ == "__main__":
-    main(NEW_CORPUS)
+    # Run comparison
+    new_tb.compare(orig_topics)  # note: based on the
+
+new_tb.json_export()

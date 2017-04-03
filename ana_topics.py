@@ -5,7 +5,7 @@ Explains POS Tags: http://universaldependencies.org/en/pos/all.html#al-en-pos/DE
 """
 # FEATURE: Add anaphora resolution (Hobbs on spaCy?)
 # TODO: Create a "this matters" topic highlighter (min threshold).
-# TODO:
+# TODO: Finish implementing graph_db_write
 
 # IMPORTS
 import spacy
@@ -17,6 +17,7 @@ import viz_graph_db
 
 # GLOBALS
 OUTPUT_DIR = 'Output/'
+TEXTS_DIR = 'Texts/'
 # TODO: Re-include ss.PRON, hopefully with anaphora resolution?
 NOUNS = {ss.NOUN, ss.PROPN}
 
@@ -27,16 +28,53 @@ class TopicBuilder:
     """
     nlp = spacy.load('en')
 
-    def __init__(self, corpus):
+    def __init__(self, corpus_name, corpus, use_graph_db=True):
         """
-        :param corpus: (str) The name of this corpus of texts (e.g., 20170101, Mat1)
+        :param corpus_name: (str) The name of this corpus of texts (e.g., 20170101, Mat1)
+        :param corpus: (dict) A dictionary of texts that make up this corpus.
+        :param use_graph_db: (bool) Is neo4j installed?
         """
-        self.corpus = corpus  # The name of the set of texts.
-        self.gt = viz_graph_db.GraphManager(corpus)  # Fire up the graph database interface
-        self.topics = {}  # Holds found Topics (basic tracking when graph db isn't available)
+        self.corpus_name = corpus_name  # (str) The name of the set (or corpus) of texts.
+        self.corpus_raw = corpus            # (dict) {[reference]: [raw text sent in for analysis]}
+        self.corpus_tokens = {}                # (dict) {[reference]: [spaCy tokenized texts]}
+        self.corpus_clean_tokens = {}          # (dict) {[reference]: [cleaned up version of tokens]}
+        self.tokens = []
+        self.tokens_clean = []
+        self.raw = ""                   # (str) All corpus texts, concatenated.
 
+        self.use_graph_db = use_graph_db
+        self.topics = {}  # Holds found Topics (basic tracking when graph db isn't available)
         now = datetime.datetime.now()
-        self.json_results = [{'run_date': now.strftime("%Y-%m-%d %H:%M"), 'corpus_name': corpus}]  # For results as json
+        self.json_results = [{'run_date': now.strftime("%Y-%m-%d %H:%M"), 'corpus_name': corpus_name}]  # For results as json
+
+        if use_graph_db:
+            self.gt = viz_graph_db.GraphManager(corpus_name)  # Fire up the graph database interface
+
+
+    def tokenize(self):
+        """
+        Tokenize the texts that we're studying.  Build 3 class properties: raw, corpus_tokens, corpus_tokens_clean.
+        :return: (dict) 
+        """
+        # TODO: This method creates for, maybe large, variables.  Maybe better to not to pre-create.
+
+        # STOP WORDS
+        with open(TEXTS_DIR + 'stopwords.txt', 'r') as file:
+            stopwords = set(file.read().split(' '))
+
+        for reference, text in self.corpus_raw.items():
+            self.raw += text + ' '
+
+            doc = self.nlp(text)
+            self.corpus_tokens[reference] = [word for word in doc]
+            self.tokens.append([word for word in doc])
+            self.corpus_clean_tokens[reference] = [str(word.lemma_).lower() for word in doc
+                                            if word.is_alpha and (str(word).lower() not in stopwords)]
+            self.tokens_clean.append([str(word.lemma_).lower() for word in doc
+                                            if word.is_alpha and (str(word).lower() not in stopwords)])
+
+        return self.corpus_tokens
+
 
     def compare(self, orig_topics, min_count=2):
         """
@@ -85,21 +123,25 @@ class TopicBuilder:
                                   'new_sum': new_sum, 'orig_sum': orig_sum, 'intersect_pct': intersect_pct,
                                   'new_comp_pct': new_comp_pct})
 
-        pass
-
-    def find_nouns(self, texts):
+    def find_nouns(self):
         """
         Loop through each entry in texts; analyze the texts for nouns
-        :param texts: (dict) A dictionary of texts.
         :return: (dict) A dictionary of topics and counts: { topic: count }
         """
-        for reference in texts:
+
+        for reference, text in self.corpus_tokens.items():
             skip_ahead = -1
 
-            tokens = [word for word in self.nlp(texts[reference])]
-            for token in tokens:
+            for token in text:
                 if token.pos in NOUNS and token.i > skip_ahead:
-                    skip_ahead = self.analyze_phrase(token, "SOURCE", reference, skip_ahead)
+                    if self.use_graph_db:
+                        skip_ahead = self.analyze_phrase(token, "TEXT", reference, skip_ahead)
+                    else:
+                        topic = token.lemma_
+                        if topic in self.topics:
+                            self.topics[topic] += 1
+                        else:
+                            self.topics[topic] = 1
 
         return self.topics
 
@@ -108,7 +150,7 @@ class TopicBuilder:
         Start with a token, find it's explanatory phrase. Then create Topic and Phrase nodes.  Then link those 
         together and to Post nodes.
         :param token: (spaCy token) A noun, pronoun, or proper noun; the topic
-        :param source_type: (str) "SOURCE" or "PHRASE"
+        :param source_type: (str) "TEXT" or "PHRASE"
         :param source_key: (str) A unique string representation of the source
         :param skip_ahead: (int) All words before this index (token.i) have been addressed; 
             avoids double-counting and loops 
@@ -120,11 +162,6 @@ class TopicBuilder:
         self.gt.topic(topic)
         self.gt.corpus_to_topic(topic)
 
-        if topic in self.topics:
-            self.topics[topic] += 1
-        else:
-            self.topics[topic] = 1
-
         # Get the subtree of the token.
         subtree = list(token.subtree)
 
@@ -132,7 +169,7 @@ class TopicBuilder:
         if len(subtree) == 1:
             if source_type == "PHRASE":
                 self.gt.phrase_to_topic(source_key, topic)
-            else:  # source is SOURCE
+            else:  # source is a TEXT
                 self.gt.text_to_topic(source_key, topic)
 
         # The Subtree Phrase is bigger than the Topic. Create the Phrase, then save to the db and link
@@ -164,5 +201,5 @@ class TopicBuilder:
         Save json_results variable to the Output directory.
         :return: 
         """
-        with open(OUTPUT_DIR + 'topics_' + self.corpus + '.json', 'w') as f:
+        with open(OUTPUT_DIR + 'topics_' + self.corpus_name + '.json', 'w') as f:
             json.dump(self.json_results, f)
