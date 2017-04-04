@@ -8,12 +8,17 @@ purpose: Open tokenize text, analyze
 * TopWords
 * TopSentence
 * Word2Vec Relationships
+
+doc2vec: https://github.com/linanqiu/word2vec-sentiments/blob/master/run.py
 """
 
 # IMPORTS
 import json
-import gensim
 import datetime
+import gensim
+from gensim import utils
+from gensim.models.doc2vec import TaggedDocument
+
 
 TEXTS_DIR = 'Texts/'
 OUTPUT_DIR = 'Output/'
@@ -85,17 +90,40 @@ class AnalyticsFactory:
         self.model_sets.append({'top_sentence_ratio': sentence_ratio})
         return self.summary_sent
 
+
+    def build_doc2vec(self, texts):
+        """
+        Train a Doc2Vec model. (https://radimrehurek.com/gensim/models/doc2vec.html)
+        :param texts: (dict) Clean (no stop words, only alpha word): {reference: [first, sentence, second sentence]}
+        :return: 
+        """
+
+        sentences = []
+        for ref, text in texts.items():
+            sentences.append(TaggedDocument(text, [ref.replace(' ', '_')]))
+
+        d2v = gensim.models.Doc2Vec(sentences, size=100, window=10, min_count=1, sample=1e-4, negative=5, workers=7)
+
+        # TODO: Output similarities using d2v.docvecs.similarity("mat_4:1", "mat_4:2")
+        # d2v.docvecs.most_similar('mat_4:25')
+        # d2v.docvecs.count
+        # d2v.docvecs.doctags
+
+        pass
+
+
     def build_word2vec(self, tokens, size=100, window=5, min_count=3, sg=0, max_words=100, min_link=0.1, pickle=False):
         """
         Train a Word2Vec model.
         Note: The "you must first build vocabulary before training the model" usually means that you haven't provided
         a properly tokenized texts to the Word2Vec model. Be sure to remove stopwords.
-            tokens = [['first', 'sentence'], ['second', 'sentence']]
-        :param size: How many training nodes? Probably min 100, but could go much higher (it'll take longer).
-        :param window: How many words on either side of word in question.
-        :param min_count: The minimum number of times a word can appear in texts and still be included.
-        :param sg: 0 for bag of words; 1 for skip gram
-        :param pickle: Should the model be saved?
+            tokens = 
+        :param tokens: (list) [['first', 'sentence'], ['second', 'sentence']]
+        :param size: (int) How many training nodes? Probably min 100, but could go much higher (it'll take longer).
+        :param window: (int) How many words on either side of word in question.
+        :param min_count: (int) The minimum number of times a word can appear in texts and still be included.
+        :param sg: (int) 0 for bag of words; 1 for skip gram
+        :param pickle: (bool) Should the model be saved?
         :return:
         """
 
@@ -112,7 +140,7 @@ class AnalyticsFactory:
         self.words = sorted(self.words, key=lambda x: x[1], reverse=True)  # sort words by count, descending
         self.words = self.words[:max_words]  # limit word count
 
-        # LINKS LIST: {"source": "god", "target": "man", "value": 1.5}
+        # LINKS LIST of sources, targets, and relationship strengths: {"source": "god", "target": "man", "value": 1.5}
         for i1, word1 in enumerate(self.words):
             for i2, word2 in enumerate(self.words):
                 sim = w2v.similarity(word1[0], word2[0])

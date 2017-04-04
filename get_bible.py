@@ -39,7 +39,7 @@ def main(reference):
     verses = {}
     for index, row in selection.iterrows():
         ref = str(row['book'] + ' ' + str(row['chapter']) + ':' + str(row['verse']))
-        verses[ref] = row['text']
+        verses[ref] = row['text'].replace("'", "").replace('"', '')
 
     return verses
 

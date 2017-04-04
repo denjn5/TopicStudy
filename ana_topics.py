@@ -35,12 +35,14 @@ class TopicBuilder:
         :param use_graph_db: (bool) Is neo4j installed?
         """
         self.corpus_name = corpus_name.replace(' ', '')  # (str) The name of the set (or corpus) of texts.
+
         self.corpus_raw = corpus            # (dict) {[reference]: [raw text sent in for analysis]}
         self.corpus_tokens = {}                # (dict) {[reference]: [spaCy tokenized texts]}
         self.corpus_clean_tokens = {}          # (dict) {[reference]: [cleaned up version of tokens]}
         self.tokens = []
         self.tokens_clean = []
         self.raw = ""                   # (str) All corpus texts, concatenated.
+        self.labeled_tokens_list = []
 
         self.use_graph_db = use_graph_db
         self.topics = {}  # Holds found Topics (basic tracking when graph db isn't available)
@@ -49,6 +51,78 @@ class TopicBuilder:
 
         if use_graph_db:
             self.gt = viz_graph_db.GraphManager(corpus_name)  # Fire up the graph database interface
+
+
+    def texts_concat_raw(self):
+        """
+        Concatenate all texts into a single string. (Ensure it hasn't already been built first.) Uses: 
+        * gensim.summarization.keywords
+        * gensim.summarization.summarize
+        :return: (str) A single string with all texts: "First sentence. Second sentence."
+        """
+
+        if not self.raw:
+            for reference, text in self.corpus_raw.items():
+                self.raw += text + ' '
+
+        return self.raw
+
+
+    def tokens_concat_clean(self):
+        """
+        Concatenate all texts into a single nested list. Remove stop words and any non-alpha words. Ensure it 
+        hasn't already been built first. Uses: 
+        * gensim.models.Word2Vec
+        :return: (list) A single list of lists of tokens: [['first', 'sentence'], ['second', 'sentence']]
+        """
+
+        # Stop Words
+        with open(TEXTS_DIR + 'stopwords.txt', 'r') as file:
+            stopwords = set(file.read().split(' '))
+
+        if not self.tokens_clean:
+            for reference, text in self.corpus_raw.items():
+                doc = self.nlp(text)
+                self.tokens_clean.append([str(word.lemma_).lower() for word in doc
+                                          if word.is_alpha and (str(word).lower() not in stopwords)])
+
+        return self.tokens_clean
+
+
+    def tokens_dict_clean(self):
+        """
+        Recreate dictionary, but transform strings into token lists. Remove stop words and any non-alpha words. 
+        Ensure it hasn't already been built first. 
+        * gensim.models.Doc2Vec
+        :return: (dict) A dictionary of references and token lists: {reference: [first, sentence, second sentence]}
+        """
+
+        # Stop Words
+        with open(TEXTS_DIR + 'stopwords.txt', 'r') as file:
+            stopwords = set(file.read().split(' '))
+
+        if not self.corpus_clean_tokens:
+            for reference, text in self.corpus_raw.items():
+                doc = self.nlp(text)
+                self.corpus_clean_tokens[reference] = [str(word.lemma_).lower() for word in doc
+                                                       if word.is_alpha and (str(word).lower() not in stopwords)]
+
+        return self.corpus_clean_tokens
+
+    def texts_tokens(self):
+        """
+        Recreate dictionary, but transform strings into token lists. Don't remove anything. Uses: 
+        * [this class]: TopicStudy.find_nouns
+        :return: (dict) A dictionary of references and token lists: {reference: [first, sentence, second sentence]}
+        """
+
+        if not self.corpus_tokens:
+            for reference, text in self.corpus_raw.items():
+                doc = self.nlp(text)
+                self.corpus_tokens[reference] = [word for word in doc]
+
+        return self.corpus_tokens
+
 
 
     def tokenize(self):
@@ -66,12 +140,9 @@ class TopicBuilder:
             self.raw += text + ' '
 
             doc = self.nlp(text)
-            self.corpus_tokens[reference] = [word for word in doc]
             self.tokens.append([word for word in doc])
             self.corpus_clean_tokens[reference] = [str(word.lemma_).lower() for word in doc
                                             if word.is_alpha and (str(word).lower() not in stopwords)]
-            self.tokens_clean.append([str(word.lemma_).lower() for word in doc
-                                            if word.is_alpha and (str(word).lower() not in stopwords)])
 
         return self.corpus_tokens
 
@@ -79,11 +150,9 @@ class TopicBuilder:
     def compare(self, orig_topics, min_count=2):
         """
         Calculate 
-            shallow % overlap = ((count of topics that are in both orig and new) * 2) / 
-                                (count of topics in orig + count of topics in new)
-            deep % overlap = (sum of topic counts that are in both orig and new) / 
+            % overlap = (sum of topic counts that are in both orig and new) / 
                                 (sum of topic counts in orig + sum of topic counts in new)
-            deep % new topics = (sum of topic counts that are only in new) / 
+            % new topics = (sum of topic counts that are only in new) / 
                                 (sum of topic counts in orig + sum of topic counts in new)
             new topics
 
@@ -128,6 +197,7 @@ class TopicBuilder:
         Loop through each entry in texts; analyze the texts for nouns
         :return: (dict) A dictionary of topics and counts: { topic: count }
         """
+        self.texts_tokens()  # creates self.corpus_tokens
 
         for reference, text in self.corpus_tokens.items():
             skip_ahead = -1
