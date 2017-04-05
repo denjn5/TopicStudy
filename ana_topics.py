@@ -194,13 +194,13 @@ class TopicBuilder(object):
                         skip_ahead = self.analyze_phrase(token, "TEXT", reference, skip_ahead)
 
         # prune & sort dictionaries; ners & phrases only populated when we're also doing a graph db
-        topics = [[k, v] for k, v in self.topics.items() if v > 1]
+        topics = [[k, v] for k, v in self.topics.items() if v > 2]
         topics = sorted(topics, key=lambda x: x[1], reverse=True)
 
-        ners = [[k, v] for k, v in self.ners.items() if v > 1]
+        ners = [[k, v] for k, v in self.ners.items() if v > 2]
         ners = sorted(ners, key=lambda x: x[1], reverse=True)
 
-        phrases = [[k, v] for k, v in self.phrases.items() if v > 1]
+        phrases = [[k, v] for k, v in self.phrases.items() if v > 2]
         phrases = sorted(phrases, key=lambda x: x[1], reverse=True)
 
         self.model_output.append({"topics": topics, "ners": ners, "phrases": phrases})

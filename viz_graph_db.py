@@ -104,7 +104,7 @@ class GraphManager:
     """
     Manages the interaction with the graph db.
     """
-    driver = GraphDatabase.driver(URI2, auth=basic_auth("neo4j", "nlp"))
+
 
     def __init__(self, corpus=""):
         """
@@ -112,6 +112,7 @@ class GraphManager:
         :param corpus: (str) The title of the set of texts that we're reviewing (a date or set of references).
         """
         # Connect to the Graph DB.
+        self.driver = GraphDatabase.driver(URI2, auth=basic_auth("neo4j", "nlp"))
         self.session = self.driver.session()
         self.session.run(TEXT_INDEX)
         self.session.run(PHRASE_INDEX)

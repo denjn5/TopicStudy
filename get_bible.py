@@ -8,6 +8,7 @@ Get bible text, return as dictionary; save to graph db.
 import pandas as pd
 import viz_graph_db
 
+
 # GLOBALS
 SRC_DIR = 'Texts/'
 
@@ -19,10 +20,10 @@ def main(reference):
     :return: dictionary {reference: texts}
     """
     # READ KJV CSV
-    df = pd.read_csv(SRC_DIR + 'kjv.csv', sep='|')
+    df = pd.read_csv(SRC_DIR + 'ov.csv', sep='|')
 
     # GET SELECTION
-    reference = reference.lower()
+    reference = reference
     if reference == 'bible':
         selection = df
     else:

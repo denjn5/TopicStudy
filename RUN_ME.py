@@ -10,7 +10,7 @@ import ana_factory
 
 # GLOBALS: Used these variables to define most common run parameters.
 # Note that most methods have settable parameters that you may want to adjust.
-NEW_CORPUS = "Psa"  # (str) The corpus where we'll do detailed analysis; formatting may be critical for get_.
+NEW_CORPUS = "Exodus"  # (str) The corpus where we'll do detailed analysis; formatting may be critical for get_.
 ORIG_CORPUS = ""  # (str) An optional corpus (used for comparison); formatting may be critical for get_.
 
 USE_GRAPH_DB = True
@@ -19,7 +19,8 @@ USE_GRAPH_DB = True
 # RUN
 # Get the Corpus
 new_texts = get_bible.main(NEW_CORPUS)  # Get properly formatted corpus (dictionary: { reference: text })
-get_bible.db_add_posts(new_texts, db_start_fresh=False)
+if USE_GRAPH_DB:
+    get_bible.db_add_posts(new_texts, db_start_fresh=False)
 
 # Run it through Topic Builder (tokenizer, graph db set up, find topics)
 tb = ana_topics.TopicBuilder(NEW_CORPUS, new_texts, USE_GRAPH_DB)
