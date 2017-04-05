@@ -43,7 +43,11 @@ class TopicBuilder(object):
         self._text_concat_raw = ""  # (str) All corpus texts, concatenated.
 
         self.use_graph_db = use_graph_db
+
         self.topics = {}  # Holds found Topics (basic tracking when graph db isn't available)
+        self.ners = {}
+        self.phrases = {}
+
         now = datetime.datetime.now()
         self.model_output = [{"TopicBuilder":
                                   {'run_date': now.strftime("%Y-%m-%d %H:%M"),
@@ -82,7 +86,7 @@ class TopicBuilder(object):
             for reference, text in self.corpus_raw.items():
                 doc = self.nlp(text)
                 self._text_token_concat_clean.append([str(word.lemma_).lower() for word in doc
-                                          if word.is_alpha and (str(word).lower() not in stopwords)])
+                                                      if word.is_alpha and (str(word).lower() not in stopwords)])
 
         return self._text_token_concat_clean
 
@@ -102,7 +106,7 @@ class TopicBuilder(object):
             for reference, text in self.corpus_raw.items():
                 doc = self.nlp(text)
                 self._text_token_dict_clean[reference] = [str(word.lemma_).lower() for word in doc
-                                                       if word.is_alpha and (str(word).lower() not in stopwords)]
+                                                          if word.is_alpha and (str(word).lower() not in stopwords)]
 
         return self._text_token_dict_clean
 
@@ -134,7 +138,6 @@ class TopicBuilder(object):
             compare logic.
         :return: 
         """
-        # TODO: Output new topic details even without compare.
         # Keep only "significant" entries (used more than "1" time)
         orig_topics_sig = {k: v for k, v in orig_topics.items() if v >= min_count}
         new_topics_sig = {k: v for k, v in self.topics.items() if v >= min_count}
@@ -168,7 +171,8 @@ class TopicBuilder(object):
 
     def nouns(self):
         """
-        Loop through each entry in texts; analyze the texts for nouns
+        Loop through each entry in texts; analyze the texts for nouns. Create a Topic dict, even if we're not doing
+        a graph db.  
         :return: (dict) A dictionary of topics and counts: { topic: count }
         """
         self.text_tokens_dict()  # creates self.corpus_tokens
@@ -178,20 +182,34 @@ class TopicBuilder(object):
 
             for token in text:
                 if token.pos in NOUNS and token.i > skip_ahead:
+
+                    # Capitalize NERs (named entities)
+                    topic = token.lemma_ if token.ent_type_ == '' else token.lemma_.upper()
+                    if topic in self.topics:
+                        self.topics[topic] += 1
+                    else:
+                        self.topics[topic] = 1
+
                     if self.use_graph_db:
                         skip_ahead = self.analyze_phrase(token, "TEXT", reference, skip_ahead)
-                    else:
-                        topic = token.lemma_
-                        if topic in self.topics:
-                            self.topics[topic] += 1
-                        else:
-                            self.topics[topic] = 1
+
+        # prune & sort dictionaries; ners & phrases only populated when we're also doing a graph db
+        topics = [[k, v] for k, v in self.topics.items() if v > 1]
+        topics = sorted(topics, key=lambda x: x[1], reverse=True)
+
+        ners = [[k, v] for k, v in self.ners.items() if v > 1]
+        ners = sorted(ners, key=lambda x: x[1], reverse=True)
+
+        phrases = [[k, v] for k, v in self.phrases.items() if v > 1]
+        phrases = sorted(phrases, key=lambda x: x[1], reverse=True)
+
+        self.model_output.append({"topics": topics, "ners": ners, "phrases": phrases})
 
         return self.topics
 
     def analyze_phrase(self, token, source_type, source_key, skip_ahead):
         """
-        Start with a token, find it's explanatory phrase. Then create Topic and Phrase nodes.  Then link those 
+        Start with a token, find it's contectual phrase. Then create Topic and Phrase nodes.  Then link those 
         together and to Post nodes.
         :param token: (spaCy token) A noun, pronoun, or proper noun; the topic
         :param source_type: (str) "TEXT" or "PHRASE"
@@ -202,9 +220,17 @@ class TopicBuilder(object):
         """
 
         # Create Topic node and add to local dictionary; use the token lemma as the key.
-        topic = token.lemma_
+        topic = token.lemma_ if token.ent_type_ == '' else token.lemma_.upper()
         self.gt.topic(topic)
         self.gt.corpus_to_topic(topic)
+
+        # Track phrases in dictionary
+        # TODO: Track NER n-grams
+        if token.ent_type_ != '':
+            if topic in self.ners:
+                self.ners[topic] += 1
+            else:
+                self.ners[topic] = 1
 
         # Get the subtree of the token.
         subtree = list(token.subtree)
@@ -218,10 +244,17 @@ class TopicBuilder(object):
 
         # The Subtree Phrase is bigger than the Topic. Create the Phrase, then save to the db and link
         else:
-            phrase = ''.join([word.lemma_ for word in subtree])
+            phrase = ''.join([(str(word) if word.lemma_ == '-PRON-' else word.lemma_) for word in subtree])
             phrase = ''.join(char for char in phrase if char not in string.punctuation)
             verbatim = ' '.join([str(word) for word in subtree]).replace(" ,", ",").replace(" ;", ";")
             verbatim = verbatim.strip(string.punctuation)
+
+            # Track phrases in dictionary
+            # TODO: Redundant with graph db. But easy for analysis
+            if phrase in self.phrases:
+                self.phrases[phrase] += 1
+            else:
+                self.phrases[phrase] = 1
 
             self.gt.phrase(phrase, verbatim)
             self.gt.phrase_to_topic(phrase, topic)
