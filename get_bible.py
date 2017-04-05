@@ -34,11 +34,10 @@ def main(reference):
         else:
             selection = df[(df['book'] == book)]
 
-    # CONCATENATE TO TEXT
-    # TODO: Replace dictionary with named tuple. Ensure unique primary key.
+    # Move to dictionary
     verses = {}
-    for index, row in selection.iterrows():
-        ref = str(row['book'] + ' ' + str(row['chapter']) + ':' + str(row['verse']))
+    for i, row in selection.iterrows():
+        ref = str(row['book'] + '_' + str(row['chapter']) + ':' + str(row['verse']))
         verses[ref] = row['text'].replace("'", "").replace('"', '')
 
     return verses

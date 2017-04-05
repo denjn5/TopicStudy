@@ -16,33 +16,16 @@ doc2vec: https://github.com/linanqiu/word2vec-sentiments/blob/master/run.py
 import json
 import datetime
 import gensim
-from gensim import utils
 from gensim.models.doc2vec import TaggedDocument
-
 
 TEXTS_DIR = 'Texts/'
 OUTPUT_DIR = 'Output/'
 
 
-class AnalyticsFactory:
+class AnalyticsFactory(object):
     """
     Runs texts through a number of analytics to identify word relationships and key sentences.
     """
-    # FEATURE: Incorporate doc2vec
-
-    # # INPUT
-    # tokens = []                 # Text as a nested list of spaCy tokens (by sentence)
-    # clean_tokens = []           # Nested list of cleaned-up spaCy tokens (by sentence)
-    # clean_text = ''             # clean_tokens as string
-    # doc = None                  # spaCy doc (retained for debug analysis).
-    #
-    # # OUTPUT
-    # top_words = set()           # Keywords as a set
-    # summary_sent = ''           # Summary sentence or 3
-    # words = []                  # word2vec model words (string, count tuple)
-    # links = []                  # word2vec links (word1, word2, link strength tuple)
-    # noun_profile = []              # The top n nouns in the texts.
-    # model_sets = []             # Model settings (for json output)
 
     def __init__(self, texts, corpus_name):
         """
@@ -52,67 +35,93 @@ class AnalyticsFactory:
         """
         self.corpus_name = corpus_name.replace(' ', '')
         self.texts = texts
-        self.words = []
-        self.links = []
-        self.noun_profile = []
-
-        now = datetime.datetime.now()
-        self.model_sets = [{'run_date': now.strftime("%Y-%m-%d %H:%M"), 'corpus_name': self.corpus_name}]
-
+        #now = datetime.datetime.now()
+        self.model_output = [{"AnalyticsFactor": {'run_date': datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+                                                  'corpus_name': self.corpus_name}}]
 
     def keywords(self, raw, word_count=5):
         """
-        Find teh top n words in the texts based on Gensim's model.
+        Find the top n words in the texts based on Gensim's TextRank model.
+        :param raw: Raw text, as a single string.
         :param word_count: How many words to find?
         :return: The top n words as a set.
         """
-        # TODO: texts vs clean_text?
+        # TODO: Uses all texts. Should we use clean_text?
         summary_words = gensim.summarization.keywords(raw, words=word_count)
-        self.top_words = set(summary_words.split('\n'))  # transform string of words to a set.
+        top_words = set(summary_words.split('\n'))  # transform string of words to a set.
 
-        return self.top_words
+        self.model_output.append({"keywords": summary_words.split('\n')})
+        return top_words
 
-    def key_sentence(self, raw, sentence_ratio=None):
+    def key_sentences(self, raw, sentence_ratio=None):
         """
-        Returns the best summary sentence based on Gensim's model.
-        By default, we return the single best sentence. Use sentence_ratio to ask for a larger chunk.
+        Returns the best summary sentence based on Gensim's modified TextRank model (which sentence is most similar to
+        all other sentences in the corpus?). We try to return as few sentences as possible, so we begin by asking for 
+        a summary that is 0.25% of the entire corpus in length, then increase up to 25% from there.
+        :param raw: Raw text, as a single string.
         :param sentence_ratio: An integer between 1 and 99 representing the percentage of summary texts you'd like.
-        :return: The summary sentence
+        :return: The summary sentence(s)
         """
 
-        for ss_ratio in (sentence_ratio if sentence_ratio else range(2, 100, 1)):
-            # ss_ratio = sentence_ratio if sentence_ratio else 20 / len(self.texts.split(' '))
-            self.summary_sent = gensim.summarization.summarize(raw, ratio=(ss_ratio / 100))  # split=True?
-            if sentence_ratio or len(self.summary_sent) > 0:
+        summary_sent = ""
+        for ss_ratio in (sentence_ratio if sentence_ratio else range(1, 100, 10)):
+            summary_sent = gensim.summarization.summarize(raw, ratio=ss_ratio/400)  # split=True?
+            if sentence_ratio or len(summary_sent) > 0:
                 sentence_ratio = ss_ratio
                 break
 
-        self.model_sets.append({'top_sentence_ratio': sentence_ratio})
-        return self.summary_sent
+        self.model_output.append({"key_sentences": {'top_sentence_ratio': sentence_ratio,
+                                                    'summary_sentences': summary_sent}})
+        return summary_sent
 
-
-    def build_doc2vec(self, texts):
+    def doc2vec(self, texts, size=100, window=5, min_count=3, sample=1e-4, negative=5, min_link=0.2, pickle=False):
         """
-        Train a Doc2Vec model. (https://radimrehurek.com/gensim/models/doc2vec.html)
+        Train a Doc2Vec model. (https://radimrehurek.com/gensim/models/doc2vec.html). 
+        
+        Both d2v.docvecs.most_similar('mat_4:25') and d2v.docvecs.doctags provide some quick insight.
         :param texts: (dict) Clean (no stop words, only alpha word): {reference: [first, sentence, second sentence]}
+        :param size: (int)
+        :param window: (int) 
+        :param min_count: (int) 
+        :param sample: 
+        :param negative: (int) 
+        :param min_link: (int) 
+        :param pickle: (bool)
         :return: 
         """
 
+        # Format texts for Doc2Vec model
         sentences = []
         for ref, text in texts.items():
-            sentences.append(TaggedDocument(text, [ref.replace(' ', '_')]))
+            sentences.append(TaggedDocument(text, [ref]))
 
-        d2v = gensim.models.Doc2Vec(sentences, size=100, window=10, min_count=1, sample=1e-4, negative=5, workers=7)
+        # Train, trim, save Doc2Vec model
+        d2v = gensim.models.Doc2Vec(sentences, size=size, window=window, min_count=min_count, sample=sample,
+                                    negative=negative, workers=7)
 
-        # TODO: Output similarities using d2v.docvecs.similarity("mat_4:1", "mat_4:2")
-        # d2v.docvecs.most_similar('mat_4:25')
-        # d2v.docvecs.count
-        # d2v.docvecs.doctags
+        d2v.docvecs.init_sims(replace=True)  # No further training?
+        if pickle:
+            d2v.save(OUTPUT_DIR + self.corpus_name + '_d2v.pickle')
 
-        pass
+        # Create output lists of nodes (docs) and doc_links
+        docs = []  # docs: {"id": "doc1"}
+        doc_links = []  # links: {"source": "doc1", "target": "doc2", "value": 1}
+        for i1, doc1 in enumerate(texts):
+            docs.append({'id': doc1})
 
+            for i2, doc2 in enumerate(texts):
+                if i1 > i2:  # skip duplicates
+                    sim = d2v.docvecs.similarity(doc1, doc2)
+                    if abs(sim) > min_link:  # skip weak relationships
+                        # re-range sim from [1:0:-1] to [5:10:15] -- prep for force diagram
+                        # TODO: Is this length value okay? Consider strength component to output.
+                        doc_links.append({'source': doc1, 'target': doc2, 'value': int((sim * -5) + 10)})
 
-    def build_word2vec(self, tokens, size=100, window=5, min_count=3, sg=0, max_words=100, min_link=0.1, pickle=False):
+        self.model_output.append({"doc2vec": {'size': size, 'window': window, 'min_count': min_count,
+                                              'doc_count': len(docs), 'min_link': min_link,
+                                              'docs': docs, 'doc_links': doc_links}})
+
+    def word2vec(self, tokens, size=100, window=5, min_count=3, sg=0, max_words=100, min_link=0.2, pickle=False):
         """
         Train a Word2Vec model.
         Note: The "you must first build vocabulary before training the model" usually means that you haven't provided
@@ -123,61 +132,60 @@ class AnalyticsFactory:
         :param window: (int) How many words on either side of word in question.
         :param min_count: (int) The minimum number of times a word can appear in texts and still be included.
         :param sg: (int) 0 for bag of words; 1 for skip gram
+        :param max_words: (ind)
+        :param min_link: 
         :param pickle: (bool) Should the model be saved?
         :return:
         """
 
-        # WORD2VEC: create model
-        #tokens_str = [[str(word) for word in sent] for sent in self.clean_tokens]
+        # Train, trim, save Word2Vec model
         w2v = gensim.models.Word2Vec(tokens, size=size, window=window, min_count=min_count, sg=sg, workers=4)
-
-        w2v.init_sims(replace=True)  # No further training?
+        w2v.wv.init_sims(replace=True)  # No further training?
         if pickle:
             w2v.save(OUTPUT_DIR + self.corpus_name + '_w2v.pickle')
 
+        # Groom the vocabulary list for output
+        words = []
         for word, vocab_obj in w2v.wv.vocab.items():
-            self.words.append((word, vocab_obj.count))
-        self.words = sorted(self.words, key=lambda x: x[1], reverse=True)  # sort words by count, descending
-        self.words = self.words[:max_words]  # limit word count
+            words.append((word, vocab_obj.count))
 
-        # LINKS LIST of sources, targets, and relationship strengths: {"source": "god", "target": "man", "value": 1.5}
-        for i1, word1 in enumerate(self.words):
-            for i2, word2 in enumerate(self.words):
-                sim = w2v.similarity(word1[0], word2[0])
-                if i1 >= i2 or abs(sim) < min_link:  # skip duplicate and weak relationships
-                    continue
-                self.links.append((word1[0], word2[0], round(sim, 2)))
-        self.model_sets.append({'w2v_size': size, 'w2v_window': window, 'w2v_min_count': min_count, 'w2v_sg': sg,
-                                'w2v_word_count': len(self.words), 'max_words': max_words, 'min_link': min_link})
+        words = sorted(words, key=lambda x: x[1], reverse=True)  # sort words by count, descending
+        words = words[:max_words]  # limit word count
+
+        # Create output lists of nodes (words) and word_links
+        nodes = []  # nodes: {"id": "word1", "count": n, "rank": i}
+        word_links = []  # links: {"source": "word1", "target": "word2", "value": 1}
+        rank = 0
+        last_count = 0
+        for i1, word1 in enumerate(words, start=1):
+
+            rank = rank if word1[1] == last_count else i1  # need to increment rank?
+            nodes.append({'id': word1[0], 'count': word1[1], 'rank': rank})
+            last_count = word1[1]
+
+            for i2, word2 in enumerate(words, start=1):
+                if i1 > i2:  # skip duplicates
+                    sim = w2v.similarity(word1[0], word2[0])
+                    if abs(sim) > min_link:  # skip weak relationships
+                        # re-range sim from [1:0:-1] to [5:10:15] -- prep for force diagram
+                        # TODO: Is this length value okay? Consider strength component to output.
+                        word_links.append({'source': word1[0], 'target': word2[0], 'value': int((sim * -5) + 10)})
+
+        # SAVE JSON (twice)
+        self.model_output.append(
+            {"word2vec": {'w2v_size': size, 'w2v_window': window, 'w2v_min_count': min_count, 'w2v_sg': sg,
+                          'w2v_word_count': len(nodes), 'max_words': max_words, 'min_link': min_link,
+                          'words': nodes, 'word_links': word_links}})
 
     def export_json(self):
         """
         Aggregates analytics results from word2vec (required), summary_sentence, and summary_words and save
         as a json file for presentation.
-        :return: The json content
+        :return: None
         """
-        assert len(self.links) > 0, "export_json requires word2vec values. Run that first."
 
-        # VOCAB LIST & COUNT: {"id": "god", "count": 32, "rank": 5}
-        nodes = []
-        i = 0
-        for word in self.words:
-            i += 1
-            top = 'top' if word in self.top_words else 'other'
-            nodes.append({'id': word[0], 'count': word[1], 'rank': i, 'top': top})
-
-        # EDGES LIST: {"source": "god", "target": "man", "value": 1.5}
-        j_links = []
-        for link in self.links:
-            j_links.append({'source': link[0], 'target': link[1], 'value': int(link[2] * 100)})
-
-        # SAVE JSON (twice)
-        json_content = {'model_settings': self.model_sets, 'nodes': nodes, 'links': j_links,
-                        'top_sentence': self.summary_sent, 'noun_profile': self.noun_profile}
         with open(OUTPUT_DIR + 'analysis_' + self.corpus_name + '.json', 'w') as f:
-            json.dump(json_content, f)
-
-        return json_content
+            json.dump(self.model_output, f)
 
 
 if __name__ == "__main__":

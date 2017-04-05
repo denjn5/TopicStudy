@@ -22,7 +22,7 @@ TEXTS_DIR = 'Texts/'
 NOUNS = {ss.NOUN, ss.PROPN}
 
 
-class TopicBuilder:
+class TopicBuilder(object):
     """
     Review a series of texts and extract topics (nouns), maintaining a noun-phrase link to the original texts.
     """
@@ -36,24 +36,23 @@ class TopicBuilder:
         """
         self.corpus_name = corpus_name.replace(' ', '')  # (str) The name of the set (or corpus) of texts.
 
-        self.corpus_raw = corpus            # (dict) {[reference]: [raw text sent in for analysis]}
-        self.corpus_tokens = {}                # (dict) {[reference]: [spaCy tokenized texts]}
-        self.corpus_clean_tokens = {}          # (dict) {[reference]: [cleaned up version of tokens]}
-        self.tokens = []
-        self.tokens_clean = []
-        self.raw = ""                   # (str) All corpus texts, concatenated.
-        self.labeled_tokens_list = []
+        self.corpus_raw = corpus  # (dict) {[reference]: [raw text sent in for analysis]}
+        self._text_tokens_dict = {}  # (dict) {[reference]: [spaCy tokenized texts]}
+        self._text_token_dict_clean = {}  # (dict) {[reference]: [cleaned up version of tokens]}
+        self._text_token_concat_clean = []
+        self._text_concat_raw = ""  # (str) All corpus texts, concatenated.
 
         self.use_graph_db = use_graph_db
         self.topics = {}  # Holds found Topics (basic tracking when graph db isn't available)
         now = datetime.datetime.now()
-        self.json_results = [{'run_date': now.strftime("%Y-%m-%d %H:%M"), 'corpus_name': corpus_name}]  # For results as json
+        self.model_output = [{"TopicBuilder":
+                                  {'run_date': now.strftime("%Y-%m-%d %H:%M"),
+                                   'corpus_name': corpus_name}}]  # For results as json
 
         if use_graph_db:
             self.gt = viz_graph_db.GraphManager(corpus_name)  # Fire up the graph database interface
 
-
-    def texts_concat_raw(self):
+    def text_concat_raw(self):
         """
         Concatenate all texts into a single string. (Ensure it hasn't already been built first.) Uses: 
         * gensim.summarization.keywords
@@ -61,14 +60,13 @@ class TopicBuilder:
         :return: (str) A single string with all texts: "First sentence. Second sentence."
         """
 
-        if not self.raw:
+        if not self._text_concat_raw:
             for reference, text in self.corpus_raw.items():
-                self.raw += text + ' '
+                self._text_concat_raw += text + ' '
 
-        return self.raw
+        return self._text_concat_raw
 
-
-    def tokens_concat_clean(self):
+    def text_token_concat_clean(self):
         """
         Concatenate all texts into a single nested list. Remove stop words and any non-alpha words. Ensure it 
         hasn't already been built first. Uses: 
@@ -80,72 +78,47 @@ class TopicBuilder:
         with open(TEXTS_DIR + 'stopwords.txt', 'r') as file:
             stopwords = set(file.read().split(' '))
 
-        if not self.tokens_clean:
+        if not self._text_token_concat_clean:
             for reference, text in self.corpus_raw.items():
                 doc = self.nlp(text)
-                self.tokens_clean.append([str(word.lemma_).lower() for word in doc
+                self._text_token_concat_clean.append([str(word.lemma_).lower() for word in doc
                                           if word.is_alpha and (str(word).lower() not in stopwords)])
 
-        return self.tokens_clean
+        return self._text_token_concat_clean
 
-
-    def tokens_dict_clean(self):
+    def text_token_dict_clean(self):
         """
-        Recreate dictionary, but transform strings into token lists. Remove stop words and any non-alpha words. 
-        Ensure it hasn't already been built first. 
+        Recreate dictionary. Transform strings into lemma list (strings, based on spaCy tokens). 
+        Remove stop words and any non-alpha words. Uses:
         * gensim.models.Doc2Vec
-        :return: (dict) A dictionary of references and token lists: {reference: [first, sentence, second sentence]}
+        :return: (dict) References and string lists: {reference: ["first", "sentence", "second", "sentence"]}
         """
 
         # Stop Words
         with open(TEXTS_DIR + 'stopwords.txt', 'r') as file:
             stopwords = set(file.read().split(' '))
 
-        if not self.corpus_clean_tokens:
+        if not self._text_token_dict_clean:
             for reference, text in self.corpus_raw.items():
                 doc = self.nlp(text)
-                self.corpus_clean_tokens[reference] = [str(word.lemma_).lower() for word in doc
+                self._text_token_dict_clean[reference] = [str(word.lemma_).lower() for word in doc
                                                        if word.is_alpha and (str(word).lower() not in stopwords)]
 
-        return self.corpus_clean_tokens
+        return self._text_token_dict_clean
 
-    def texts_tokens(self):
+    def text_tokens_dict(self):
         """
-        Recreate dictionary, but transform strings into token lists. Don't remove anything. Uses: 
+        Recreate dictionary, but transform strings into token lists of spaCy tokens. Don't remove anything. Uses: 
         * [this class]: TopicStudy.find_nouns
         :return: (dict) A dictionary of references and token lists: {reference: [first, sentence, second sentence]}
         """
 
-        if not self.corpus_tokens:
+        if not self._text_tokens_dict:
             for reference, text in self.corpus_raw.items():
                 doc = self.nlp(text)
-                self.corpus_tokens[reference] = [word for word in doc]
+                self._text_tokens_dict[reference] = [word for word in doc]
 
-        return self.corpus_tokens
-
-
-
-    def tokenize(self):
-        """
-        Tokenize the texts that we're studying.  Build 3 class properties: raw, corpus_tokens, corpus_tokens_clean.
-        :return: (dict) 
-        """
-        # TODO: This method creates for, maybe large, variables.  Maybe better to not to pre-create.
-
-        # STOP WORDS
-        with open(TEXTS_DIR + 'stopwords.txt', 'r') as file:
-            stopwords = set(file.read().split(' '))
-
-        for reference, text in self.corpus_raw.items():
-            self.raw += text + ' '
-
-            doc = self.nlp(text)
-            self.tokens.append([word for word in doc])
-            self.corpus_clean_tokens[reference] = [str(word.lemma_).lower() for word in doc
-                                            if word.is_alpha and (str(word).lower() not in stopwords)]
-
-        return self.corpus_tokens
-
+        return self._text_tokens_dict
 
     def compare(self, orig_topics, min_count=2):
         """
@@ -161,6 +134,7 @@ class TopicBuilder:
             compare logic.
         :return: 
         """
+        # TODO: Output new topic details even without compare.
         # Keep only "significant" entries (used more than "1" time)
         orig_topics_sig = {k: v for k, v in orig_topics.items() if v >= min_count}
         new_topics_sig = {k: v for k, v in self.topics.items() if v >= min_count}
@@ -181,25 +155,25 @@ class TopicBuilder:
         new_comp_pct = round(new_comp_sum / new_sum, 3)
 
         # New Topic list: Topic, Count, % of Total, Comp?
-        new_topics_expanded = sorted([[k, v, round(v / new_sum, 3), ('COMP' if k in new_comp_topics else '')]
-                                      for k, v in new_topics_sig.items()], key=lambda x: x[1], reverse=True)
-        intersect_topics_expanded = [[k, v, round(v / orig_sum, 3)]
-                                     for k, v in orig_topics_sig.items() if k in intersect_topics]
+        new_topics_details = sorted([[k, v, round(v / new_sum, 3), ('COMP' if k in new_comp_topics else '')]
+                                     for k, v in new_topics_sig.items()], key=lambda x: x[1], reverse=True)
+        intersect_topics_details = [[k, v, round(v / orig_sum, 3)]
+                                    for k, v in orig_topics_sig.items() if k in intersect_topics]
 
-        self.json_results.append({'new_topics_expanded': new_topics_expanded,
-                                  'intersect_topics_expanded': intersect_topics_expanded,
-                                  'new_comp_topics': [w for w in new_comp_topics],
-                                  'new_sum': new_sum, 'orig_sum': orig_sum, 'intersect_pct': intersect_pct,
-                                  'new_comp_pct': new_comp_pct})
+        self.model_output.append({"compare": {'new_topics_details': new_topics_details,
+                                              'intersect_topics_details': intersect_topics_details,
+                                              'new_comp_topics': [w for w in new_comp_topics],
+                                              'new_sum': new_sum, 'orig_sum': orig_sum, 'intersect_pct': intersect_pct,
+                                              'new_comp_pct': new_comp_pct}})
 
-    def find_nouns(self):
+    def nouns(self):
         """
         Loop through each entry in texts; analyze the texts for nouns
         :return: (dict) A dictionary of topics and counts: { topic: count }
         """
-        self.texts_tokens()  # creates self.corpus_tokens
+        self.text_tokens_dict()  # creates self.corpus_tokens
 
-        for reference, text in self.corpus_tokens.items():
+        for reference, text in self._text_tokens_dict.items():
             skip_ahead = -1
 
             for token in text:
@@ -266,10 +240,10 @@ class TopicBuilder:
         # skip_ahead: The index of the final word addressed in the Subtree. This avoids dupe work.
         return subtree[-1].i
 
-    def json_export(self):
+    def export_json(self):
         """
         Save json_results variable to the Output directory.
         :return: 
         """
         with open(OUTPUT_DIR + 'topics_' + self.corpus_name + '.json', 'w') as f:
-            json.dump(self.json_results, f)
+            json.dump(self.model_output, f)
