@@ -5,7 +5,6 @@ Explains POS Tags: http://universaldependencies.org/en/pos/all.html#al-en-pos/DE
 """
 # FEATURE: Add anaphora resolution (Hobbs on spaCy?)
 # TODO: Create a "this matters" topic highlighter (min threshold).
-# TODO: Finish implementing graph_db_write
 
 # IMPORTS
 import spacy
@@ -14,6 +13,7 @@ import string
 import json
 import datetime
 import viz_graph_db
+
 
 # GLOBALS
 OUTPUT_DIR = 'Output/'
@@ -48,10 +48,9 @@ class TopicBuilder(object):
         self.ners = {}
         self.phrases = {}
 
-        now = datetime.datetime.now()
-        self.model_output = [{"TopicBuilder":
-                                  {'run_date': now.strftime("%Y-%m-%d %H:%M"),
-                                   'corpus_name': corpus_name}}]  # For results as json
+        self.model_output = {"TopicBuilder":
+                                  {'run_date': datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+                                   'corpus_name': corpus_name}}  # For results as json
 
         if use_graph_db:
             self.gt = viz_graph_db.GraphManager(corpus_name)  # Fire up the graph database interface
@@ -163,11 +162,11 @@ class TopicBuilder(object):
         intersect_topics_details = [[k, v, round(v / orig_sum, 3)]
                                     for k, v in orig_topics_sig.items() if k in intersect_topics]
 
-        self.model_output.append({"compare": {'new_topics_details': new_topics_details,
-                                              'intersect_topics_details': intersect_topics_details,
-                                              'new_comp_topics': [w for w in new_comp_topics],
-                                              'new_sum': new_sum, 'orig_sum': orig_sum, 'intersect_pct': intersect_pct,
-                                              'new_comp_pct': new_comp_pct}})
+        self.model_output["compare"] = {'new_topics_details': new_topics_details,
+                                        'intersect_topics_details': intersect_topics_details,
+                                        'new_comp_topics': [w for w in new_comp_topics], 'new_sum': new_sum,
+                                        'orig_sum': orig_sum, 'intersect_pct': intersect_pct,
+                                        'new_comp_pct': new_comp_pct}
 
     def nouns(self):
         """
@@ -194,16 +193,19 @@ class TopicBuilder(object):
                         skip_ahead = self.analyze_phrase(token, "TEXT", reference, skip_ahead)
 
         # prune & sort dictionaries; ners & phrases only populated when we're also doing a graph db
-        topics = [[k, v] for k, v in self.topics.items() if v > 2]
-        topics = sorted(topics, key=lambda x: x[1], reverse=True)
+        # TODO: Make these into
+        topics = sorted(self.topics.items(), key=lambda x: x[1], reverse=True)
+        topics_out = [{"id": k, "count": v} for k, v in topics if v > 2]
 
-        ners = [[k, v] for k, v in self.ners.items() if v > 2]
-        ners = sorted(ners, key=lambda x: x[1], reverse=True)
+        ners = sorted(self.ners.items(), key=lambda x: x[1], reverse=True)
+        ners_out = [{"id": k, "count": v} for k, v in ners if v > 2]
 
-        phrases = [[k, v] for k, v in self.phrases.items() if v > 2]
-        phrases = sorted(phrases, key=lambda x: x[1], reverse=True)
+        phrases = sorted(self.phrases.items(), key=lambda x: x[1], reverse=True)
+        phrases_out = [{"id": k, "count": v} for k, v in phrases if v > 2]
 
-        self.model_output.append({"topics": topics, "ners": ners, "phrases": phrases})
+        self.model_output["topics"] = topics_out
+        self.model_output["named_entities"] = ners_out
+        self.model_output["phrases"] = phrases_out
 
         return self.topics
 
@@ -278,5 +280,6 @@ class TopicBuilder(object):
         Save json_results variable to the Output directory.
         :return: 
         """
-        with open(OUTPUT_DIR + 'topics_' + self.corpus_name + '.json', 'w') as f:
+        # with open(OUTPUT_DIR + 'topics_' + self.corpus_name + '.json', 'w') as f:
+        with open(OUTPUT_DIR + 'topics.json', 'w') as f:
             json.dump(self.model_output, f)

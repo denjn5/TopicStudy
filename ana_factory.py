@@ -35,10 +35,9 @@ class AnalyticsFactory(object):
         """
         self.corpus_name = corpus_name.replace(' ', '')
         self.texts = texts
-        #now = datetime.datetime.now()
-        self.model_output = [{"AnalyticsFactor": {'run_date': datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
-                                                  'corpus_name': self.corpus_name}}]
-
+        self.model_output = {"AnalyticsFactor": {'run_date': datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+                                                  'corpus_name': self.corpus_name}}
+    
     def keywords(self, raw, word_count=5):
         """
         Find the top n words in the texts based on Gensim's TextRank model.
@@ -50,7 +49,7 @@ class AnalyticsFactory(object):
         summary_words = gensim.summarization.keywords(raw, words=word_count)
         top_words = set(summary_words.split('\n'))  # transform string of words to a set.
 
-        self.model_output.append({"keywords": summary_words.split('\n')})
+        self.model_output["keywords"] = summary_words.split('\n')
         return top_words
 
     def key_sentences(self, raw, sentence_ratio=None):
@@ -70,8 +69,8 @@ class AnalyticsFactory(object):
                 sentence_ratio = ss_ratio
                 break
 
-        self.model_output.append({"key_sentences": {'top_sentence_ratio': sentence_ratio,
-                                                    'summary_sentences': summary_sent}})
+        self.model_output["key_sentences"] = {'top_sentence_ratio': sentence_ratio,
+                                                    'summary_sentences': summary_sent}
         return summary_sent
 
     def doc2vec(self, texts, size=100, window=5, min_count=3, sample=1e-4, negative=5, min_link=0.2, pickle=False):
@@ -117,9 +116,9 @@ class AnalyticsFactory(object):
                         # TODO: Is this length value okay? Consider strength component to output.
                         doc_links.append({'source': doc1, 'target': doc2, 'value': int((sim * -5) + 10)})
 
-        self.model_output.append({"doc2vec": {'size': size, 'window': window, 'min_count': min_count,
-                                              'doc_count': len(docs), 'min_link': min_link,
-                                              'docs': docs, 'doc_links': doc_links}})
+        self.model_output["doc2vec"]: {"size": size, "window": window, "min_count": min_count,
+                                              "document_count": len(docs), "min_link": min_link,
+                                              "docs": docs, "doc_links": doc_links}
 
     def word2vec(self, tokens, size=100, window=5, min_count=3, sg=0, max_words=100, min_link=0.2, pickle=False):
         """
@@ -172,10 +171,10 @@ class AnalyticsFactory(object):
                         word_links.append({'source': word1[0], 'target': word2[0], 'value': int((sim * -5) + 10)})
 
         # SAVE JSON (twice)
-        self.model_output.append(
-            {"word2vec": {'w2v_size': size, 'w2v_window': window, 'w2v_min_count': min_count, 'w2v_sg': sg,
-                          'w2v_word_count': len(nodes), 'max_words': max_words, 'min_link': min_link,
-                          'words': nodes, 'word_links': word_links}})
+        self.model_output["word2vec"] = {'w2v_size': size, 'w2v_window': window, 'w2v_min_count': min_count, 'w2v_sg': sg,
+                          'w2v_word_count': len(nodes), 'max_words': max_words, 'min_link': min_link}
+        self.model_output['words'] = nodes
+        self.model_output['word_links'] = word_links
 
     def export_json(self):
         """
@@ -184,7 +183,8 @@ class AnalyticsFactory(object):
         :return: None
         """
 
-        with open(OUTPUT_DIR + 'analysis_' + self.corpus_name + '.json', 'w') as f:
+        # with open(OUTPUT_DIR + 'analysis_' + self.corpus_name + '.json', 'w') as f:
+        with open(OUTPUT_DIR + 'analysis.json', 'w') as f:
             json.dump(self.model_output, f)
 
 

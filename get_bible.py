@@ -1,7 +1,6 @@
 """
 Get bible text, return as dictionary; save to graph db.
 """
-# FEATURE: Add ESV support
 # FEATURE: Can I run a compare of all chapters in the Bible to see which ones have the greatest overlap?
 
 # IMPORTS
@@ -19,7 +18,7 @@ def main(reference):
     :param reference: bible or "luk 4" or "gen 2" or "john"
     :return: dictionary {reference: texts}
     """
-    # READ KJV CSV
+    # READ KJV (kjv.csv) or ov.csv file
     df = pd.read_csv(SRC_DIR + 'ov.csv', sep='|')
 
     # GET SELECTION
