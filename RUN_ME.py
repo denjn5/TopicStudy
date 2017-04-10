@@ -13,7 +13,7 @@ import ana_factory
 NEW_CORPUS: str = "Matthew 10"  # The corpus where we'll do detailed analysis; formatting may be critical for get_.
 ORIG_CORPUS: str = ""  # An optional corpus (used for comparison); formatting may be critical for get_.
 
-USE_GRAPH_DB: bool = False
+USE_GRAPH_DB: bool = True
 
 
 # RUN
