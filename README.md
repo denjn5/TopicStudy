@@ -1,6 +1,6 @@
 
 
-#Text Analyzer
+#Text Analyzer#
 A series of helper functions to find topics in context, new important topics and sentences, and compare topics across texts, and visualize.
 
 It's broken into 3 sets of classes:
