@@ -13,11 +13,19 @@ It's broken into 3 sets of classes:
     -> json 
 
 Code example test
-'''
-var formatNumber = d3.format(",d");
+```javascript
+function fancyAlert(arg) {
+  if(arg) {
+    $.facebox({div:'#foo'})
+  }
+}
+```
 
-var x = d3.scaleLinear();
-'''
+```python
+import get_bible
+import ana_topics
+import ana_factory
+```
 
 # Web Output
 A web page that illustrates results
