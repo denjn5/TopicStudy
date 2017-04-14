@@ -12,6 +12,12 @@ It's broken into 3 sets of classes:
     -> graph database
     -> json 
 
+Code example test
+'''
+var formatNumber = d3.format(",d");
+
+var x = d3.scaleLinear();
+'''
 
 # Web Output
 A web page that illustrates results
