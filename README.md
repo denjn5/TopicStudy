@@ -1,6 +1,6 @@
 
 
-#Text Analyzer
+# Text Analyzer
 A series of helper functions to find topics in context, new important topics and sentences, and compare topics across texts, and visualize.
 
 It's broken into 3 sets of classes:
@@ -12,8 +12,22 @@ It's broken into 3 sets of classes:
     -> graph database
     -> json 
 
+Code example test
+```javascript
+function fancyAlert(arg) {
+  if(arg) {
+    $.facebox({div:'#foo'})
+  }
+}
+```
 
-#Web Output
+```python
+import get_bible
+import ana_topics
+import ana_factory
+```
+
+# Web Output
 A web page that illustrates results
 
 
