@@ -22,7 +22,6 @@ def main(reference):
     df = pd.read_csv(SRC_DIR + 'ov.csv', sep='|')
 
     # GET SELECTION
-    reference = reference
     if reference == 'bible':
         selection = df
     else:
@@ -36,9 +35,11 @@ def main(reference):
 
     # Move to dictionary
     verses = {}
+    # {"id": "id", "author": "author", "title": "title", "sentiment": 0.5, "source": "source", "url": "http...", "htmlCard": "<div></div>"}
     for i, row in selection.iterrows():
         ref = str(row['book'] + '_' + str(int(row['chapter'])) + ':' + str(int(row['verse'])))
         verses[ref] = row['text'].replace("'", "").replace('"', '')
+
 
     return verses
 

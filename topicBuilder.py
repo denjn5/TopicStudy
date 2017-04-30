@@ -28,7 +28,7 @@ class TopicBuilder(object):
     """
     nlp = spacy.load('en')
 
-    def __init__(self, corpus_name, corpus, use_graph_db=True):
+    def __init__(self, corpus_name, corpus, use_graph_db=True, max_topics=50):
         """
         :param corpus_name: (str) The name of this corpus of texts (e.g., 20170101, Mat1)
         :param corpus: (dict) A dictionary of texts that make up this corpus.
@@ -37,6 +37,7 @@ class TopicBuilder(object):
         self.corpus_name = corpus_name.replace(' ', '')  # (str) The name of the set (or corpus) of texts.
 
         self.corpus_raw = corpus  # (dict) {[reference]: [raw text sent in for analysis]}
+        self.max_topics = max_topics
         self._text_tokens_dict = {}  # (dict) {[reference]: [spaCy tokenized texts]}
         self._text_token_dict_clean = {}  # (dict) {[reference]: [cleaned up version of tokens]}
         self._text_token_concat_clean = []
@@ -231,6 +232,7 @@ class TopicBuilder(object):
         for i, topic in enumerate(topics):
             cur_count = topic['count']
             rank = i + 1 if (cur_count < prev_count) else rank
+            # TODO: max rank
             topic['rank'] = rank
             # Prune low-use phrases and the 'phrase' attribute
             topic['children'] = [{'name': child['name'], 'size': child['size']} for child
