@@ -10,7 +10,7 @@ import ana_factory
 
 # GLOBALS: Used these variables to define most common run parameters.
 # Note that most methods have settable parameters that you may want to adjust.
-NEW_CORPUS: str = "Matthew 10"  # The corpus where we'll do detailed analysis; formatting may be critical for get_.
+NEW_CORPUS: str = "Mark"  # The corpus where we'll do detailed analysis; formatting may be critical for get_.
 ORIG_CORPUS: str = ""  # An optional corpus (used for comparison); formatting may be critical for get_.
 
 USE_GRAPH_DB: bool = True
@@ -27,12 +27,12 @@ tb: ana_topics.TopicBuilder = ana_topics.TopicBuilder(NEW_CORPUS, new_texts, USE
 new_topics: dict = tb.nouns()
 
 # Word2Vec; find key sentences, and key words.
-ana: ana_factory.AnalyticsFactory = ana_factory.AnalyticsFactory(new_texts, NEW_CORPUS)
-ana.key_sentences(tb.text_concat_raw())
-ana.keywords(tb.text_concat_raw())
-ana.word2vec(tb.text_token_concat_clean())
-ana.doc2vec(tb.text_token_dict_clean())
-ana.export_json()
+# ana: ana_factory.AnalyticsFactory = ana_factory.AnalyticsFactory(new_texts, NEW_CORPUS)
+# ana.key_sentences(tb.text_concat_raw())
+# ana.keywords(tb.text_concat_raw())
+# ana.word2vec(tb.text_token_concat_clean())
+# ana.doc2vec(tb.text_token_dict_clean())
+# ana.export_json()
 
 
 # Compare with original Corpus.

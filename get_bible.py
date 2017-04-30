@@ -37,7 +37,7 @@ def main(reference):
     # Move to dictionary
     verses = {}
     for i, row in selection.iterrows():
-        ref = str(row['book'] + '_' + str(row['chapter']) + ':' + str(row['verse']))
+        ref = str(row['book'] + '_' + str(int(row['chapter'])) + ':' + str(int(row['verse'])))
         verses[ref] = row['text'].replace("'", "").replace('"', '')
 
     return verses

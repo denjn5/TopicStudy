@@ -45,12 +45,13 @@ class TopicBuilder(object):
         self.use_graph_db = use_graph_db
 
         self.topics = {}  # Holds found Topics (basic tracking when graph db isn't available)
-        self.ners = {}
+        self.viz_topics = []  # Dupe of self.topics, but fully formed for sunburst viz.
+        self.viz_texts = []  # An ID driven list of the sources used in the viz (to avoid huge file size).
         self.phrases = {}
 
-        self.model_output = {"TopicBuilder":
-                                  {'run_date': datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
-                                   'corpus_name': corpus_name}}  # For results as json
+        self.model_output = {'name': corpus_name,
+                                   'run_date': datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+                                   }  # For results as json
 
         if use_graph_db:
             self.gt = viz_graph_db.GraphManager(corpus_name)  # Fire up the graph database interface
@@ -138,6 +139,7 @@ class TopicBuilder(object):
         :return: 
         """
         # Keep only "significant" entries (used more than "1" time)
+        # TODO: Blend with self.viz_topics and delete current self.topics
         orig_topics_sig = {k: v for k, v in orig_topics.items() if v >= min_count}
         new_topics_sig = {k: v for k, v in self.topics.items() if v >= min_count}
 
@@ -184,28 +186,68 @@ class TopicBuilder(object):
 
                     # Capitalize NERs (named entities)
                     topic = token.lemma_ if token.ent_type_ == '' else token.lemma_.upper()
-                    if topic in self.topics:
-                        self.topics[topic] += 1
-                    else:
-                        self.topics[topic] = 1
+
+                    # Increment topics dict
+                    # if topic in self.topics:
+                    #     self.topics[topic] += 1
+                    # else:
+                    #     self.topics[topic] = 1
+
+                    # Loop through viz_topics to increment
+                    found = False
+                    for viz_topic in self.viz_topics:
+                        if viz_topic['name'] == topic:
+                            viz_topic['size'] += 1
+                            viz_topic['count'] += 1
+                            viz_topic['text_ids'].append(reference)
+                            break
+
+                    if not found:
+                        self.viz_topics.append({'name': topic, 'size': 1, 'count': 1, 'children': [],
+                                                'text_ids': [reference]})
+
+
+                    found = False
+                    for viz_text in self.viz_texts:
+                        if viz_text['id'] == reference:
+                            found = True
+                            break
+
+                    if not found:
+                        self.viz_texts.append({'id': reference, 'text': self.corpus_raw[reference],
+                                               'author': '', 'sentiment': 0.5, 'title': '', 'source': ''})
+
 
                     if self.use_graph_db:
                         skip_ahead = self.analyze_phrase(token, "TEXT", reference, skip_ahead)
 
-        # prune & sort dictionaries; ners & phrases only populated when we're also doing a graph db
-        # TODO: Make these into
-        topics = sorted(self.topics.items(), key=lambda x: x[1], reverse=True)
-        topics_out = [{"id": k, "count": v} for k, v in topics if v > 2]
 
-        ners = sorted(self.ners.items(), key=lambda x: x[1], reverse=True)
-        ners_out = [{"id": k, "count": v} for k, v in ners if v > 2]
+        # format as a json-style list with name, size, rank (prepping for sunburst viz).
+        topics = [topic for topic in self.viz_topics if topic['count'] > 5]
+        topics = sorted(topics, key=lambda x: x['count'], reverse=True)
+
+        rank = 1
+        prev_count = 0
+        for i, topic in enumerate(topics):
+            cur_count = topic['count']
+            rank = i + 1 if (cur_count < prev_count) else rank
+            topic['rank'] = rank
+            # Prune low-use phrases and the 'phrase' attribute
+            topic['children'] = [{'name': child['name'], 'size': child['size']} for child
+                                 in topic['children'] if child['size'] > 5]
+            child_count = 0
+            for child in topic['children']:
+                child['rank'] = rank
+                child_count += child['size']
+            topic['size'] = topic['size'] - child_count
+            prev_count = cur_count
+
 
         phrases = sorted(self.phrases.items(), key=lambda x: x[1], reverse=True)
-        phrases_out = [{"id": k, "count": v} for k, v in phrases if v > 2]
+        phrases_out = [{"name": k, "size": v} for k, v in phrases if v > 2]
 
-        self.model_output["topics"] = topics_out
-        self.model_output["named_entities"] = ners_out
-        self.model_output["phrases"] = phrases_out
+        self.model_output["children"] = topics
+        # self.model_output["phrases"] = phrases_out
 
         return self.topics
 
@@ -226,18 +268,10 @@ class TopicBuilder(object):
         self.gt.topic(topic)
         self.gt.corpus_to_topic(topic)
 
-        # Track phrases in dictionary
-        # TODO: Track NER n-grams
-        if token.ent_type_ != '':
-            if topic in self.ners:
-                self.ners[topic] += 1
-            else:
-                self.ners[topic] = 1
-
         # Get the subtree of the token.
         subtree = list(token.subtree)
 
-        # If the Topic and Subtree Phrase are equal, write the topic and link it to the source.
+        # If the Topic and Subtree Phrase are equal, write the Topic and link it directly to the original Text.
         if len(subtree) == 1:
             if source_type == "PHRASE":
                 self.gt.phrase_to_topic(source_key, topic)
@@ -257,6 +291,25 @@ class TopicBuilder(object):
                 self.phrases[phrase] += 1
             else:
                 self.phrases[phrase] = 1
+
+            # Loop through viz_topics to find the Topic
+            for viz_topic in self.viz_topics:
+                if viz_topic['name'] == topic:
+
+                    # Topic found! Now either increment the phrase or add it.
+                    found = False
+                    for child in viz_topic['children']:
+                        # Compare based on phrase, which is a genericized version of the underlying text (fewer groups)
+                        if child['phrase'] == phrase:
+                            child['name'] = verbatim
+                            child['size'] += 1
+                            found = True
+                            break
+
+                    if not found:
+                        viz_topic['children'].append({'name': verbatim, 'phrase': phrase, 'size': 1})
+
+                    break
 
             self.gt.phrase(phrase, verbatim)
             self.gt.phrase_to_topic(phrase, topic)
@@ -281,5 +334,7 @@ class TopicBuilder(object):
         :return: 
         """
         # with open(OUTPUT_DIR + 'topics_' + self.corpus_name + '.json', 'w') as f:
-        with open(OUTPUT_DIR + 'topics.json', 'w') as f:
+        with open(OUTPUT_DIR + 'corpusATopics.json', 'w') as f:
             json.dump(self.model_output, f)
+        with open(OUTPUT_DIR + 'corpusATexts.json', 'w') as f:
+            json.dump(self.viz_texts, f)
