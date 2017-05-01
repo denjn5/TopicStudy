@@ -11,7 +11,7 @@ import spacy
 import spacy.symbols as ss
 import string
 import json
-import datetime
+from datetime import datetime
 import viz_graph_db
 
 
@@ -37,22 +37,29 @@ class TopicBuilder(object):
         self.corpus_name = corpus_name.replace(' ', '')  # (str) The name of the set (or corpus) of texts.
 
         self.corpus_raw = corpus  # (dict) {[reference]: [raw text sent in for analysis]}
+        self.texts = corpus
         self.max_topics = max_topics
-        self._text_tokens_dict = {}  # (dict) {[reference]: [spaCy tokenized texts]}
-        self._text_token_dict_clean = {}  # (dict) {[reference]: [cleaned up version of tokens]}
         self._text_token_concat_clean = []
         self._text_concat_raw = ""  # (str) All corpus texts, concatenated.
 
         self.use_graph_db = use_graph_db
 
-        self.topics = {}  # Holds found Topics (basic tracking when graph db isn't available)
-        self.viz_topics = []  # Dupe of self.topics, but fully formed for sunburst viz.
-        self.viz_texts = []  # An ID driven list of the sources used in the viz (to avoid huge file size).
+        self.topics = []  # Holds found Topics (basic tracking when graph db isn't available)
         self.phrases = {}
 
         self.model_output = {'name': corpus_name,
-                                   'run_date': datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
-                                   }  # For results as json
+                                   'run_date': datetime.now().strftime("%Y-%m-%d %H:%M")}  # For results as json
+
+        # Stop Words
+        with open(TEXTS_DIR + 'stopwords.txt', 'r') as file:
+            stopwords = set(file.read().split(' '))
+
+        for text in self.texts:
+            doc = self.nlp(text['text'])
+            text['tokens'] = [word for word in doc]
+            text['tokens_clean'] = [str(word.lemma_).lower() for word in doc
+                                    if word.is_alpha and (str(word).lower() not in stopwords)]
+
 
         if use_graph_db:
             self.gt = viz_graph_db.GraphManager(corpus_name)  # Fire up the graph database interface
@@ -91,40 +98,6 @@ class TopicBuilder(object):
 
         return self._text_token_concat_clean
 
-    def text_token_dict_clean(self):
-        """
-        Recreate dictionary. Transform strings into lemma list (strings, based on spaCy tokens). 
-        Remove stop words and any non-alpha words. Uses:
-        * gensim.models.Doc2Vec
-        :return: (dict) References and string lists: {reference: ["first", "sentence", "second", "sentence"]}
-        """
-
-        # Stop Words
-        with open(TEXTS_DIR + 'stopwords.txt', 'r') as file:
-            stopwords = set(file.read().split(' '))
-
-        if not self._text_token_dict_clean:
-            for reference, text in self.corpus_raw.items():
-                doc = self.nlp(text)
-                self._text_token_dict_clean[reference] = [str(word.lemma_).lower() for word in doc
-                                                          if word.is_alpha and (str(word).lower() not in stopwords)]
-
-        return self._text_token_dict_clean
-
-    def text_tokens_dict(self):
-        """
-        Recreate dictionary, but transform strings into token lists of spaCy tokens. Don't remove anything. Uses: 
-        * [this class]: TopicStudy.find_nouns
-        :return: (dict) A dictionary of references and token lists: {reference: [first, sentence, second sentence]}
-        """
-
-        if not self._text_tokens_dict:
-            for reference, text in self.corpus_raw.items():
-                doc = self.nlp(text)
-                self._text_tokens_dict[reference] = [word for word in doc]
-
-        return self._text_tokens_dict
-
     def compare(self, orig_topics, min_count=2):
         """
         Calculate 
@@ -140,9 +113,9 @@ class TopicBuilder(object):
         :return: 
         """
         # Keep only "significant" entries (used more than "1" time)
-        # TODO: Blend with self.viz_topics and delete current self.topics
+        # TODO: Blend with self.topics and delete current self.topics
         orig_topics_sig = {k: v for k, v in orig_topics.items() if v >= min_count}
-        new_topics_sig = {k: v for k, v in self.topics.items() if v >= min_count}
+        new_topics_sig = {k: v for k, v in self.topics if v >= min_count}
 
         # What Topics are in both sets?
         intersect_topics = set([t for t in new_topics_sig if t in orig_topics_sig])
@@ -177,81 +150,33 @@ class TopicBuilder(object):
         a graph db.  
         :return: (dict) A dictionary of topics and counts: { topic: count }
         """
-        self.text_tokens_dict()  # creates self.corpus_tokens
 
-        for reference, text in self._text_tokens_dict.items():
+        for text in self.texts:
+
+            # for reference, text in self._text_tokens_dict.items():
             skip_ahead = -1
 
-            for token in text:
+            for token in text['tokens']:
                 if token.pos in NOUNS and token.i > skip_ahead:
 
                     # Capitalize NERs (named entities)
-                    topic = token.lemma_ if token.ent_type_ == '' else token.lemma_.upper()
+                    topic_word = token.lemma_ if token.ent_type_ == '' else token.lemma_.upper()
 
-                    # Increment topics dict
-                    # if topic in self.topics:
-                    #     self.topics[topic] += 1
-                    # else:
-                    #     self.topics[topic] = 1
-
-                    # Loop through viz_topics to increment
+                    # Loop through topics to increment
                     found = False
-                    for viz_topic in self.viz_topics:
-                        if viz_topic['name'] == topic:
-                            viz_topic['size'] += 1
-                            viz_topic['count'] += 1
-                            viz_topic['text_ids'].append(reference)
+                    for topic in self.topics:
+                        if topic['name'] == topic_word:
+                            topic['size'] += 1
+                            topic['count'] += 1
+                            topic['id'].add(text['id'])
                             break
 
                     if not found:
-                        self.viz_topics.append({'name': topic, 'size': 1, 'count': 1, 'children': [],
-                                                'text_ids': [reference]})
+                        self.topics.append({'name': topic_word, 'size': 1, 'count': 1, 'children': [],
+                                                'id': {text['id']}})
 
+                    skip_ahead = self.analyze_phrase(token, "TEXT", text['id'], skip_ahead)
 
-                    found = False
-                    for viz_text in self.viz_texts:
-                        if viz_text['id'] == reference:
-                            found = True
-                            break
-
-                    if not found:
-                        self.viz_texts.append({'id': reference, 'text': self.corpus_raw[reference],
-                                               'author': '', 'sentiment': 0.5, 'title': '', 'source': ''})
-
-
-                    if self.use_graph_db:
-                        skip_ahead = self.analyze_phrase(token, "TEXT", reference, skip_ahead)
-
-
-        # format as a json-style list with name, size, rank (prepping for sunburst viz).
-        topics = [topic for topic in self.viz_topics if topic['count'] > 5]
-        topics = sorted(topics, key=lambda x: x['count'], reverse=True)
-
-        rank = 1
-        prev_count = 0
-        for i, topic in enumerate(topics):
-            cur_count = topic['count']
-            rank = i + 1 if (cur_count < prev_count) else rank
-            # TODO: max rank
-            topic['rank'] = rank
-            # Prune low-use phrases and the 'phrase' attribute
-            topic['children'] = [{'name': child['name'], 'size': child['size']} for child
-                                 in topic['children'] if child['size'] > 5]
-            child_count = 0
-            for child in topic['children']:
-                child['rank'] = rank
-                child_count += child['size']
-            topic['size'] = topic['size'] - child_count
-            prev_count = cur_count
-
-
-        phrases = sorted(self.phrases.items(), key=lambda x: x[1], reverse=True)
-        phrases_out = [{"name": k, "size": v} for k, v in phrases if v > 2]
-
-        self.model_output["children"] = topics
-        # self.model_output["phrases"] = phrases_out
-
-        return self.topics
 
     def analyze_phrase(self, token, source_type, source_key, skip_ahead):
         """
@@ -266,19 +191,21 @@ class TopicBuilder(object):
         """
 
         # Create Topic node and add to local dictionary; use the token lemma as the key.
-        topic = token.lemma_ if token.ent_type_ == '' else token.lemma_.upper()
-        self.gt.topic(topic)
-        self.gt.corpus_to_topic(topic)
+        topic_word = token.lemma_ if token.ent_type_ == '' else token.lemma_.upper()
+        if self.use_graph_db:
+            self.gt.topic(topic_word)
+            self.gt.corpus_to_topic(topic_word)
 
         # Get the subtree of the token.
         subtree = list(token.subtree)
 
         # If the Topic and Subtree Phrase are equal, write the Topic and link it directly to the original Text.
         if len(subtree) == 1:
-            if source_type == "PHRASE":
-                self.gt.phrase_to_topic(source_key, topic)
-            else:  # source is a TEXT
-                self.gt.text_to_topic(source_key, topic)
+            if self.use_graph_db:
+                if source_type == "PHRASE":
+                    self.gt.phrase_to_topic(source_key, topic_word)
+                else:  # source is a TEXT
+                    self.gt.text_to_topic(source_key, topic_word)
 
         # The Subtree Phrase is bigger than the Topic. Create the Phrase, then save to the db and link
         else:
@@ -287,39 +214,34 @@ class TopicBuilder(object):
             verbatim = ' '.join([str(word) for word in subtree]).replace(" ,", ",").replace(" ;", ";")
             verbatim = verbatim.strip(string.punctuation)
 
-            # Track phrases in dictionary
-            # TODO: Redundant with graph db. But easy for analysis
-            if phrase in self.phrases:
-                self.phrases[phrase] += 1
-            else:
-                self.phrases[phrase] = 1
-
-            # Loop through viz_topics to find the Topic
-            for viz_topic in self.viz_topics:
-                if viz_topic['name'] == topic:
+            # Track phrases in hierarchical "json"
+            for topic in self.topics:
+                if topic['name'] == topic_word:
 
                     # Topic found! Now either increment the phrase or add it.
                     found = False
-                    for child in viz_topic['children']:
+                    for child in topic['children']:
                         # Compare based on phrase, which is a genericized version of the underlying text (fewer groups)
                         if child['phrase'] == phrase:
                             child['name'] = verbatim
                             child['size'] += 1
+                            child['id'].add(source_key)  # TODO: Fix this: nested phrase (called from L250)
                             found = True
                             break
 
                     if not found:
-                        viz_topic['children'].append({'name': verbatim, 'phrase': phrase, 'size': 1})
+                        topic['children'].append({'name': verbatim, 'phrase': phrase, 'size': 1, 'id': {source_key}})
 
                     break
 
-            self.gt.phrase(phrase, verbatim)
-            self.gt.phrase_to_topic(phrase, topic)
+            if self.use_graph_db:
+                self.gt.phrase(phrase, verbatim)
+                self.gt.phrase_to_topic(phrase, topic_word)
 
-            if source_type == "PHRASE":
-                self.gt.phrase_to_phrase(source_key, phrase)
-            else:  # source is SOURCE
-                self.gt.text_to_phrase(source_key, phrase)
+                if source_type == "PHRASE":
+                    self.gt.phrase_to_phrase(source_key, phrase)
+                else:  # source is SOURCE
+                    self.gt.text_to_phrase(source_key, phrase)
 
             # Are there additional nouns in the Subtree? Loop through them and call this method recursively.
             nouns = [word for word in subtree if word.pos in NOUNS and word.i > skip_ahead]
@@ -330,13 +252,42 @@ class TopicBuilder(object):
         # skip_ahead: The index of the final word addressed in the Subtree. This avoids dupe work.
         return subtree[-1].i
 
-    def export_json(self):
+    def export_topics(self, save_location):
         """
         Save json_results variable to the Output directory.
         :return: 
         """
-        # with open(OUTPUT_DIR + 'topics_' + self.corpus_name + '.json', 'w') as f:
-        with open(OUTPUT_DIR + 'corpusATopics.json', 'w') as f:
+
+        # format as a json-style list with name, size, rank (prepping for sunburst viz).
+        topics = [topic for topic in self.topics if topic['count'] > 5]
+        topics = sorted(topics, key=lambda x: x['count'], reverse=True)
+
+        rank = 1
+        prev_use_count = 0
+        for i, topic in enumerate(topics):
+            cur_use_count = topic['count']
+
+            if cur_use_count < prev_use_count:  # this topic occurs left often than the last one
+                rank = i + 1
+                if rank > self.max_topics:
+                    break
+
+            topic['rank'] = rank
+            # Prune low-use phrases and the 'phrase' attribute
+            topic['children'] = [{'name': child['name'], 'size': child['size'], 'id': list(child['id'])} for child
+                                 in topic['children'] if child['size'] > 5]
+            child_use_count = 0
+            for child in topic['children']:
+                child['rank'] = rank
+                child_use_count += child['size']
+            topic['size'] = topic['size'] - child_use_count
+            topic['id'] = list(topic['id'])
+            prev_use_count = cur_use_count
+
+        self.model_output["children"] = topics
+
+        file_name = 'Topics-{}-{}.json'.format(self.corpus_name, datetime.today().strftime('%Y%m%d'))
+
+        # with open(save_location + 'topics_' + self.corpus_name + '.json', 'w') as f:
+        with open(save_location + file_name, 'w') as f:
             json.dump(self.model_output, f)
-        with open(OUTPUT_DIR + 'corpusATexts.json', 'w') as f:
-            json.dump(self.viz_texts, f)
