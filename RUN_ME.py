@@ -49,7 +49,7 @@ if ORIG_CORPUS:
     orig_tb = topic_builder.TopicBuilder(ORIG_CORPUS, orig_texts, use_graph_db=False)
     tb.compare(orig_tb.nouns())  # note: based on the
 
-tb.export_topics(OUTPUT_DIR)
+tb.export_topics(OUTPUT_DIR, date_file_name=False)
 bt.export_texts(OUTPUT_DIR)
 
 

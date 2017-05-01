@@ -50,6 +50,9 @@ class TopicBuilder(object):
         self.model_output = {'name': corpus_name,
                                    'run_date': datetime.now().strftime("%Y-%m-%d %H:%M")}  # For results as json
 
+        self.source_key = ""  # This is a bit of a hack. When I dive recursively into the phrases, when I get deep
+            # lose the connection to the orig verse. This helps me retain it.
+
         # Stop Words
         with open(TEXTS_DIR + 'stopwords.txt', 'r') as file:
             stopwords = set(file.read().split(' '))
@@ -213,6 +216,8 @@ class TopicBuilder(object):
             phrase = ''.join(char for char in phrase if char not in string.punctuation)
             verbatim = ' '.join([str(word) for word in subtree]).replace(" ,", ",").replace(" ;", ";")
             verbatim = verbatim.strip(string.punctuation)
+            if source_type == 'TEXT':
+                self.source_key = source_key
 
             # Track phrases in hierarchical "json"
             for topic in self.topics:
@@ -225,12 +230,12 @@ class TopicBuilder(object):
                         if child['phrase'] == phrase:
                             child['name'] = verbatim
                             child['size'] += 1
-                            child['id'].add(source_key)  # TODO: Fix this: nested phrase (called from L250)
+                            child['id'].add(self.source_key)  # TODO: Fix this: nested phrase (called from L250)
                             found = True
                             break
 
                     if not found:
-                        topic['children'].append({'name': verbatim, 'phrase': phrase, 'size': 1, 'id': {source_key}})
+                        topic['children'].append({'name': verbatim, 'phrase': phrase, 'size': 1, 'id': {self.source_key}})
 
                     break
 
@@ -252,7 +257,7 @@ class TopicBuilder(object):
         # skip_ahead: The index of the final word addressed in the Subtree. This avoids dupe work.
         return subtree[-1].i
 
-    def export_topics(self, save_location):
+    def export_topics(self, save_location, date_file_name=True):
         """
         Save json_results variable to the Output directory.
         :return: 
@@ -286,7 +291,10 @@ class TopicBuilder(object):
 
         self.model_output["children"] = topics
 
-        file_name = 'Topics-{}-{}.json'.format(self.corpus_name, datetime.today().strftime('%Y%m%d'))
+        if date_file_name:
+            file_name = 'Topics-{}-{}.json'.format(self.corpus_name, datetime.today().strftime('%Y%m%d'))
+        else:
+            file_name = 'Topics-{}.json'.format(self.corpus_name)
 
         # with open(save_location + 'topics_' + self.corpus_name + '.json', 'w') as f:
         with open(save_location + file_name, 'w') as f:

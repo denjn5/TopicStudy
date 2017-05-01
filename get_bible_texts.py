@@ -97,7 +97,7 @@ class getBibleTexts(object):
 
 
     def export_texts(self, save_location):
-        file_name = 'Texts-{}-{}.json'.format(self.reference, datetime.today().strftime('%Y%m%d'))
+        file_name = 'Texts-{}.json'.format(self.reference)
 
         texts = []
         for text in self.texts:
