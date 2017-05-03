@@ -34,24 +34,23 @@ class TopicBuilder(object):
         :param corpus: (dict) A dictionary of texts that make up this corpus.
         :param use_graph_db: (bool) Is neo4j installed?
         """
+        # Meta
         self.corpus_name = corpus_name.replace(' ', '')  # (str) The name of the set (or corpus) of texts.
+        self.text_id = ""  # This is a bit of a hack. When I dive recursively into the phrases, when I get deep
+            # lose the connection to the orig verse. This helps me retain it.
 
-        self.corpus_raw = corpus  # (dict) {[reference]: [raw text sent in for analysis]}
-        self.texts = corpus
-        self.max_topics = max_topics
-        self._text_token_concat_clean = []
-        self._text_concat_raw = ""  # (str) All corpus texts, concatenated.
-
+        # Settings
         self.use_graph_db = use_graph_db
+        self.max_topics = max_topics
 
+        # Primary Data
+        self.texts = corpus
         self.topics = []  # Holds found Topics (basic tracking when graph db isn't available)
-        self.phrases = {}
-
         self.model_output = {'name': corpus_name,
                                    'run_date': datetime.now().strftime("%Y-%m-%d %H:%M")}  # For results as json
 
-        self.source_key = ""  # This is a bit of a hack. When I dive recursively into the phrases, when I get deep
-            # lose the connection to the orig verse. This helps me retain it.
+        # TODO: Unneeded?
+        self.phrases = {}
 
         # Stop Words
         with open(TEXTS_DIR + 'stopwords.txt', 'r') as file:
@@ -63,43 +62,10 @@ class TopicBuilder(object):
             text['tokens_clean'] = [str(word.lemma_).lower() for word in doc
                                     if word.is_alpha and (str(word).lower() not in stopwords)]
 
-
         if use_graph_db:
             self.gt = viz_graph_db.GraphManager(corpus_name)  # Fire up the graph database interface
 
-    def text_concat_raw(self):
-        """
-        Concatenate all texts into a single string. (Ensure it hasn't already been built first.) Uses: 
-        * gensim.summarization.keywords
-        * gensim.summarization.summarize
-        :return: (str) A single string with all texts: "First sentence. Second sentence."
-        """
 
-        if not self._text_concat_raw:
-            for reference, text in self.corpus_raw.items():
-                self._text_concat_raw += text + ' '
-
-        return self._text_concat_raw
-
-    def text_token_concat_clean(self):
-        """
-        Concatenate all texts into a single nested list. Remove stop words and any non-alpha words. Ensure it 
-        hasn't already been built first. Uses: 
-        * gensim.models.Word2Vec
-        :return: (list) A single list of lists of tokens: [['first', 'sentence'], ['second', 'sentence']]
-        """
-
-        # Stop Words
-        with open(TEXTS_DIR + 'stopwords.txt', 'r') as file:
-            stopwords = set(file.read().split(' '))
-
-        if not self._text_token_concat_clean:
-            for reference, text in self.corpus_raw.items():
-                doc = self.nlp(text)
-                self._text_token_concat_clean.append([str(word.lemma_).lower() for word in doc
-                                                      if word.is_alpha and (str(word).lower() not in stopwords)])
-
-        return self._text_token_concat_clean
 
     def compare(self, orig_topics, min_count=2):
         """
@@ -155,6 +121,7 @@ class TopicBuilder(object):
         """
 
         for text in self.texts:
+            self.text_id = text['id']  # text_id always remembers where we're at as we loop through our texts
 
             # for reference, text in self._text_tokens_dict.items():
             skip_ahead = -1
@@ -162,97 +129,110 @@ class TopicBuilder(object):
             for token in text['tokens']:
                 if token.pos in NOUNS and token.i > skip_ahead:
 
-                    # Capitalize NERs (named entities)
-                    topic_word = token.lemma_ if token.ent_type_ == '' else token.lemma_.upper()
+                    # # Capitalize NERs (named entities)
+                    # topic_word = token.lemma_ if token.ent_type_ == '' else token.lemma_.upper()
+                    #
+                    # text['topics'].add(topic_word)  # Found a Topic. Note that in the current Text.
+                    #
+                    # # Loop through topics to increment
+                    # found = False
+                    # for topic in self.topics:
+                    #     if topic['name'] == topic_word:
+                    #         topic['size'] += 1
+                    #         topic['count'] += 1
+                    #         break
+                    #
+                    # if not found:
+                    #     self.topics.append({'name': topic_word, 'size': 1, 'count': 1, 'children': []})
+                    #
+                    # # Also, add it to the graph db...
 
-                    # Loop through topics to increment
-                    found = False
-                    for topic in self.topics:
-                        if topic['name'] == topic_word:
-                            topic['size'] += 1
-                            topic['count'] += 1
-                            topic['id'].add(text['id'])
-                            break
 
-                    if not found:
-                        self.topics.append({'name': topic_word, 'size': 1, 'count': 1, 'children': [],
-                                                'id': {text['id']}})
-
-                    skip_ahead = self.analyze_phrase(token, "TEXT", text['id'], skip_ahead)
+                    skip_ahead = self.analyze_phrase(token, "TEXT", skip_ahead)
 
 
-    def analyze_phrase(self, token, source_type, source_key, skip_ahead):
+    def analyze_phrase(self, token, source_type, skip_ahead, source_id=''):
         """
-        Start with a token, find it's contectual phrase. Then create Topic and Phrase nodes.  Then link those 
-        together and to Post nodes.
+        Start with a token, find it's contextual phrase. Then create Topic and Phrase nodes.  Then link those 
+        together with their source Text node.
         :param token: (spaCy token) A noun, pronoun, or proper noun; the topic
         :param source_type: (str) "TEXT" or "PHRASE"
-        :param source_key: (str) A unique string representation of the source
         :param skip_ahead: (int) All words before this index (token.i) have been addressed; 
             avoids double-counting and loops 
+        :param source_id: (str) Usually this will be the self.text_id In that case, no need to send it. However, 
+            when we're being recursive, this could be the phrase that another phrase is derived from.
         :return: (int) The new skip_ahead value
         """
 
-        # Create Topic node and add to local dictionary; use the token lemma as the key.
-        topic_word = token.lemma_ if token.ent_type_ == '' else token.lemma_.upper()
-        if self.use_graph_db:
-            self.gt.topic(topic_word)
-            self.gt.corpus_to_topic(topic_word)
-
-        # Get the subtree of the token.
+        # Get the subtree of the token & lemmatize current token (upper if proper noun)
         subtree = list(token.subtree)
+        topic_word = token.lemma_ if token.ent_type_ == '' else token.lemma_.upper()
+
+        # Found a Topic, note that in the Texts data store
+        for text in self.texts:
+            if text['id'] == self.text_id:
+                text['topics'].add(topic_word)
 
         # If the Topic and Subtree Phrase are equal, write the Topic and link it directly to the original Text.
         if len(subtree) == 1:
             if self.use_graph_db:
+                # TODO: Do we use both branches of this if statement?
                 if source_type == "PHRASE":
-                    self.gt.phrase_to_topic(source_key, topic_word)
+                    self.gt.phrase_to_topic(source_id, topic_word)
                 else:  # source is a TEXT
-                    self.gt.text_to_topic(source_key, topic_word)
+                    self.gt.text_to_topic(self.text_id, topic_word)
 
         # The Subtree Phrase is bigger than the Topic. Create the Phrase, then save to the db and link
         else:
-            phrase = ''.join([(str(word) if word.lemma_ == '-PRON-' else word.lemma_) for word in subtree])
-            phrase = ''.join(char for char in phrase if char not in string.punctuation)
+            # phrase_id: a simplified representation of this phrase, used to combine similar phrases
+            phrase_id = ''.join([(str(word) if word.lemma_ == '-PRON-' else word.lemma_) for word in subtree])
+            phrase_id = ''.join(char for char in phrase_id if char not in string.punctuation)
             verbatim = ' '.join([str(word) for word in subtree]).replace(" ,", ",").replace(" ;", ";")
             verbatim = verbatim.strip(string.punctuation)
-            if source_type == 'TEXT':
-                self.source_key = source_key
 
-            # Track phrases in hierarchical "json"
+            # Track phrase_ids in hierarchical "json"
+            # FIXME: I believe this is causing some words to be double-added to the Topics data store...
+            found_topic = False
             for topic in self.topics:
                 if topic['name'] == topic_word:
+                    topic['size'] += 1
+                    topic['count'] += 1
 
-                    # Topic found! Now either increment the phrase or add it.
-                    found = False
-                    for child in topic['children']:
-                        # Compare based on phrase, which is a genericized version of the underlying text (fewer groups)
-                        if child['phrase'] == phrase:
-                            child['name'] = verbatim
-                            child['size'] += 1
-                            child['id'].add(self.source_key)  # TODO: Fix this: nested phrase (called from L250)
+                    # Topic found! Now look for the context phrase_id (either increment the phrase_id or add it).
+                    found_phrase = False
+                    for phrase in topic['children']:
+                        # Compare based on phrase_id, which is a genericized version of the underlying text (fewer groups)
+                        if phrase['phrase_id'] == phrase_id:
+                            phrase['name'] = verbatim
+                            phrase['size'] += 1
                             found = True
                             break
 
-                    if not found:
-                        topic['children'].append({'name': verbatim, 'phrase': phrase, 'size': 1, 'id': {self.source_key}})
+                    if not found_phrase:
+                        topic['children'].append({'name': verbatim, 'phrase_id': phrase_id, 'size': 1})
 
-                    break
+                    break  # We've found or added the phrase, stop looing
+
+            # Didn't find the topic? No problem, add it in.
+            if not found_topic:
+                self.topics.append({'name': topic_word, 'size': 1, 'count': 1, 'children': []})
 
             if self.use_graph_db:
-                self.gt.phrase(phrase, verbatim)
-                self.gt.phrase_to_topic(phrase, topic_word)
+                self.gt.topic(topic_word)
+                self.gt.corpus_to_topic(topic_word)
+                self.gt.phrase(phrase_id, verbatim)
+                self.gt.phrase_to_topic(phrase_id, topic_word)
 
                 if source_type == "PHRASE":
-                    self.gt.phrase_to_phrase(source_key, phrase)
+                    self.gt.phrase_to_phrase(source_id, phrase_id)
                 else:  # source is SOURCE
-                    self.gt.text_to_phrase(source_key, phrase)
+                    self.gt.text_to_phrase(self.text_id, phrase_id)
 
             # Are there additional nouns in the Subtree? Loop through them and call this method recursively.
             nouns = [word for word in subtree if word.pos in NOUNS and word.i > skip_ahead]
             for n in range(0, len(nouns)):
                 if n > 0 and nouns[n].i > skip_ahead:
-                    skip_ahead = self.analyze_phrase(nouns[n], "PHRASE", phrase, skip_ahead)
+                    skip_ahead = self.analyze_phrase(nouns[n], "PHRASE", skip_ahead, source_id=phrase_id)
 
         # skip_ahead: The index of the final word addressed in the Subtree. This avoids dupe work.
         return subtree[-1].i
@@ -270,24 +250,23 @@ class TopicBuilder(object):
         rank = 1
         prev_use_count = 0
         for i, topic in enumerate(topics):
-            cur_use_count = topic['count']
+            current_use_count = topic['count']
 
-            if cur_use_count < prev_use_count:  # this topic occurs left often than the last one
+            if current_use_count < prev_use_count:  # this topic occurs left often than the last one
                 rank = i + 1
                 if rank > self.max_topics:
                     break
 
             topic['rank'] = rank
             # Prune low-use phrases and the 'phrase' attribute
-            topic['children'] = [{'name': child['name'], 'size': child['size'], 'id': list(child['id'])} for child
+            topic['children'] = [{'name': child['name'], 'size': child['size']} for child
                                  in topic['children'] if child['size'] > 5]
             child_use_count = 0
             for child in topic['children']:
                 child['rank'] = rank
                 child_use_count += child['size']
             topic['size'] = topic['size'] - child_use_count
-            topic['id'] = list(topic['id'])
-            prev_use_count = cur_use_count
+            prev_use_count = current_use_count
 
         self.model_output["children"] = topics
 

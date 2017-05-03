@@ -70,11 +70,11 @@ class getBibleTexts(object):
             # {} = Matthew 1:4
             # {} = [text]
             html_card = "<div class='bs-callout'><a href='https://www.esv.org/{}/' target='_blank'>" \
-                       "<img src='Libraries/esv.png?size=40' class='img' /></a><b>{}</b>. {}</div>" \
-                .format(url_book_chapter, text_id, text)
+                       "<img src='Libraries/esv.png' width=40 height=40 class='img' /></a><b>{}</b>. {}</div>" \
+                .format(url_book_chapter, title, text)
 
             self.texts.append({"id": text_id, "author": "", "title": title, "sentiment": 0.5, "source": "",
-                               "text": text, "htmlCard": html_card})
+                               "text": text, "topics": set(), "htmlCard": html_card})
 
         return self.texts
 
@@ -102,7 +102,7 @@ class getBibleTexts(object):
         texts = []
         for text in self.texts:
             texts.append({"id": text['id'], "title": text['title'], "sentiment": text['sentiment'],
-                         "text": text['text'], "htmlCard": text['htmlCard']})
+                         "text": text['text'], "topics": list(text['topics']), "htmlCard": text['htmlCard']})
 
         with open(save_location + file_name, 'w') as f:
             json.dump(texts, f)
