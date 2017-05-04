@@ -23,7 +23,6 @@ Text parsing work:
 
 # IMPORTS
 import pandas as pd
-from datetime import datetime
 import json
 import viz_graph_db
 
@@ -60,21 +59,13 @@ class getBibleTexts(object):
 
         # Move to standard list structure
         for i, row in selection.iterrows():
-            url_book_chapter = str(row['book'] + '+' + str(int(row['chapter'])))
+            url_book_chapter = row['book'] + '+' + str(int(row['chapter']))
             title = str(row['book'] + ' ' + str(int(row['chapter'])) + ':' + str(int(row['verse'])))
             text_id = str(row['book'] + '_' + str(int(row['chapter'])) + ':' + str(int(row['verse'])))
             text = row['text'].replace("'", "").replace('"', '')
-            # verses[text_id] = row['text'].replace("'", "").replace('"', '')
-
-            # {} = Matthew+1
-            # {} = Matthew 1:4
-            # {} = [text]
-            html_card = "<div class='bs-callout'><a href='https://www.esv.org/{}/' target='_blank'>" \
-                       "<img src='Libraries/esv.png' width=40 height=40 class='img' /></a><b>{}</b>. {}</div>" \
-                .format(url_book_chapter, title, text)
 
             self.texts.append({"id": text_id, "author": "", "title": title, "sentiment": 0.5, "source": "",
-                               "text": text, "topics": set(), "htmlCard": html_card})
+                               "text": text, "textMark": text, "topics": set(), "urlBookChapter": url_book_chapter})
 
         return self.texts
 
@@ -101,8 +92,13 @@ class getBibleTexts(object):
 
         texts = []
         for text in self.texts:
+            # TODO: Do I need width=40?
+            html_card = "<div class='bs-callout'><a href='https://www.esv.org/{}/' target='_blank'>" \
+                        "<img src='Libraries/esv.png' height=40 class='img' /></a><b>{}</b>. {}</div>" \
+                .format(text['urlBookChapter'], text['title'], text['textMark'])
+
             texts.append({"id": text['id'], "title": text['title'], "sentiment": text['sentiment'],
-                         "text": text['text'], "topics": list(text['topics']), "htmlCard": text['htmlCard']})
+                         "text": text['text'], "topics": list(text['topics']), "htmlCard": html_card})
 
         with open(save_location + file_name, 'w') as f:
             json.dump(texts, f)

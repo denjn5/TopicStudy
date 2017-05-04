@@ -172,6 +172,7 @@ class TopicBuilder(object):
         for text in self.texts:
             if text['id'] == self.text_id:
                 text['topics'].add(topic_word)
+                text['textMark'] = text['textMark'].replace(str(token), "<mark class='topic_word'>" + str(token) + "</mark>")
 
         # If the Topic and Subtree Phrase are equal, write the Topic and link it directly to the original Text.
         if len(subtree) == 1:
@@ -190,8 +191,7 @@ class TopicBuilder(object):
             verbatim = ' '.join([str(word) for word in subtree]).replace(" ,", ",").replace(" ;", ";")
             verbatim = verbatim.strip(string.punctuation)
 
-            # Track phrase_ids in hierarchical "json"
-            # FIXME: I believe this is causing some words to be double-added to the Topics data store...
+            # Track phrase_ids in hierarchical arrays and dictionaries (which translates nicely to json).
             found_topic = False
             for topic in self.topics:
                 if topic['name'] == topic_word:
