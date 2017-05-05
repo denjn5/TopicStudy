@@ -24,27 +24,31 @@ Text parsing work:
 # IMPORTS
 import pandas as pd
 import json
-import viz_graph_db
-
+import graph_database
 
 # GLOBALS
-SRC_DIR = 'Texts/'
+SRC_DIR = 'Data/'
 SAVE_DIR = 'Output/'
-HTML_CARD = "<div class='card bs-callout {sent_class}'><div class='cardTime'>{time}</div>" \
+
+HTML_CARD = "<div class='card bs-callout {card_sent}'><div class='cardTime'>{time}</div>" \
             "<img src='{logo_path}' height=40 class='cardImage' />" \
             "<div class='cardTitle'><a href='{url}' target='_blank'><b>{card_title}</b></a></div>" \
             "<div class='cardText'>{card_text}</div>"
 
 
 class getBibleTexts(object):
-
     def __init__(self, book, chapter=""):
-        self.texts = []  # a list for all of our texts
-        self.book = book
+        """
+        
+        :param book: The book for analysis. Either a Bible Book (e.g., Genesis) or "Bible"
+        :param chapter: An optional chapter reference
+        """
+        self.texts = []  # a list of dictionaries; each item contains one verse with its attributes
+        # TODO: Should a text really be a chapter? That'd simplify large block compares. And let me test highlites.
+        self.book = book  # the requested Bible book or full Bible
         self.chapter = chapter
         self.reference = book + (('_' + str(chapter)) if chapter else '')
         self.title = book + ((' ' + str(chapter)) if chapter else '')
-
 
     def get_texts(self):
         """
@@ -74,7 +78,6 @@ class getBibleTexts(object):
 
         return self.texts
 
-
     def db_add_posts(self, db_start_fresh=False):
         """
         Save each verse to the graph database.
@@ -82,30 +85,30 @@ class getBibleTexts(object):
         :return: 
         """
         # TODO: Add "title" to Text node.
-        gt = viz_graph_db.GraphManager()
+        gt = graph_database.GraphManager()
 
         if db_start_fresh:
             gt.delete_all()
 
         for text in self.texts:
             gt.text(text['id'], text['text'])
-        # gt.close()
-
+            # gt.close()
 
     def export_texts(self, save_location):
         file_name = 'Texts-{}.json'.format(self.reference)
 
         texts = []
         for text in self.texts:
-            html_card = HTML_CARD.format(sent_class='', time='', logo_path='Logos\esv.png', card_title=text['title'],
-                             url='https://www.esv.org/' + text['urlBookChapter'], card_text=text['textMark'])
+            sent_class = 'bs-callout-neg' if text['sentiment'] < -0.33 else ('bs-callout-pos' if text['sentiment'] > 0.33 else '')
+            html_card = HTML_CARD.format(card_sent=sent_class, time='', logo_path='Logos\esv.png', card_title=text['title'],
+                                         url='https://www.esv.org/' + text['urlBookChapter'],
+                                         card_text=text['textMark'])
 
             texts.append({"id": text['id'], "title": text['title'], "sentiment": text['sentiment'],
-                         "text": text['text'], "topics": list(text['topics']), "htmlCard": html_card})
+                          "text": text['text'], "topics": list(text['topics']), "htmlCard": html_card})
 
         with open(save_location + file_name, 'w') as f:
             json.dump(texts, f)
-
 
 # if __name__ == "__main__":
 #     main("psa 23")

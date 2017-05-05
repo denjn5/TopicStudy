@@ -12,12 +12,12 @@ import spacy.symbols as ss
 import string
 import json
 from datetime import datetime
-import viz_graph_db
+import graph_database
 
 
 # GLOBALS
 OUTPUT_DIR = 'Output/'
-TEXTS_DIR = 'Texts/'
+TEXTS_DIR = 'Data/'
 # TODO: Re-include ss.PRON, hopefully with anaphora resolution?
 NOUNS = {ss.NOUN, ss.PROPN}
 
@@ -63,7 +63,7 @@ class TopicBuilder(object):
                                     if word.is_alpha and (str(word).lower() not in stopwords)]
 
         if use_graph_db:
-            self.gt = viz_graph_db.GraphManager(corpus_name)  # Fire up the graph database interface
+            self.gt = graph_database.GraphManager(corpus_name)  # Fire up the graph database interface
 
 
 
@@ -168,7 +168,7 @@ class TopicBuilder(object):
         subtree = list(token.subtree)
         topic_word = token.lemma_ if token.ent_type_ == '' else token.lemma_.upper()
 
-        # Found a Topic, note that in the Texts data store
+        # Found a Topic, note that in the Data data store
         for text in self.texts:
             if text['id'] == self.text_id:
                 text['topics'].add(topic_word)
