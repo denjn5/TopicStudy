@@ -29,6 +29,11 @@ import viz_graph_db
 
 # GLOBALS
 SRC_DIR = 'Texts/'
+SAVE_DIR = 'Output/'
+HTML_CARD = "<div class='card bs-callout {sent_class}'><div class='cardTime'>{time}</div>" \
+            "<img src='{logo_path}' height=40 class='cardImage' />" \
+            "<div class='cardTitle'><a href='{url}' target='_blank'><b>{card_title}</b></a></div>" \
+            "<div class='cardText'>{card_text}</div>"
 
 
 class getBibleTexts(object):
@@ -92,10 +97,8 @@ class getBibleTexts(object):
 
         texts = []
         for text in self.texts:
-            # TODO: Do I need width=40?
-            html_card = "<div class='bs-callout'><a href='https://www.esv.org/{}/' target='_blank'>" \
-                        "<img src='Libraries/esv.png' height=40 class='img' /></a><b>{}</b>. {}</div>" \
-                .format(text['urlBookChapter'], text['title'], text['textMark'])
+            html_card = HTML_CARD.format(sent_class='', time='', logo_path='Logos\esv.png', card_title=text['title'],
+                             url='https://www.esv.org/' + text['urlBookChapter'], card_text=text['textMark'])
 
             texts.append({"id": text['id'], "title": text['title'], "sentiment": text['sentiment'],
                          "text": text['text'], "topics": list(text['topics']), "htmlCard": html_card})
