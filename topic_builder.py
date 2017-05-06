@@ -28,7 +28,7 @@ class TopicBuilder(object):
     """
     nlp = spacy.load('en')
 
-    def __init__(self, corpus_name, corpus, use_graph_db=True, max_topics=50):
+    def __init__(self, corpus_name, corpus, use_graph_db=True, max_topics=40):
         """
         :param corpus_name: (str) The name of this corpus of texts (e.g., 20170101, Mat1)
         :param corpus: (dict) A dictionary of texts that make up this corpus.

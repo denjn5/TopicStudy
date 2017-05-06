@@ -33,7 +33,7 @@ SAVE_DIR = 'Output/'
 HTML_CARD = "<div class='card bs-callout {card_sent}'><div class='cardTime'>{time}</div>" \
             "<img src='{logo_path}' height=40 class='cardImage' />" \
             "<div class='cardTitle'><a href='{url}' target='_blank'><b>{card_title}</b></a></div>" \
-            "<div class='cardText'>{card_text}</div>"
+            "<div class='cardText'>{card_text}</div><img src='Logos\more.png' height=40 class='cardMore' /></div>"
 
 
 class getBibleTexts(object):

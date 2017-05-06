@@ -7,7 +7,7 @@ Running this file makes all of the key stuff happen.
 import get_bible_texts
 import topic_builder
 import sentiment
-import document_relationships
+import find_relationships
 
 # GLOBALS: Used these variables to define most common run parameters.
 # Note that most methods have settable parameters that you may want to adjust.
