@@ -20,7 +20,7 @@ MAX_TOPICS = 50
 
 # RUN
 # Get the Corpus
-bt = get_bible_texts.getBibleTexts("Genesis")  # Get properly formatted corpus (dictionary: { reference: text })
+bt = get_bible_texts.getBibleTexts("Luke")  # Get properly formatted corpus (dictionary: { reference: text })
 texts = bt.get_texts()
 reference = bt.reference
 if USE_GRAPH_DB:

@@ -30,10 +30,10 @@ import graph_database
 SRC_DIR = 'Data/'
 SAVE_DIR = 'Output/'
 
-HTML_CARD = "<div class='card bs-callout {card_sent}'><div class='cardTime'>{time}</div>" \
-            "<img src='{logo_path}' height=40 class='cardImage' />" \
-            "<div class='cardTitle'><a href='{url}' target='_blank'><b>{card_title}</b></a></div>" \
-            "<div class='cardText'>{card_text}</div><img src='Logos\more.png' height=40 class='cardMore' /></div>"
+HTML_CARD = "<div class='card bs-callout {card_sent}' id='c{id}'><div class='cardTime'>{time}</div>" \
+            "<a href='{url}' target='_blank'><img src='{logo_path}' height=40 class='cardImage' /></a>" \
+            "<div class='cardTitle h4'><a href='javascript:void(0);' onclick='showFullText({id})'>{card_title}</a></div>" \
+            "<div class='cardText'>{card_text}</div></div>"
 
 
 class getBibleTexts(object):
@@ -98,10 +98,10 @@ class getBibleTexts(object):
         file_name = 'Texts-{}.json'.format(self.reference)
 
         texts = []
-        for text in self.texts:
+        for i, text in enumerate(self.texts):
             sent_class = 'bs-callout-neg' if text['sentiment'] < -0.33 else ('bs-callout-pos' if text['sentiment'] > 0.33 else '')
-            html_card = HTML_CARD.format(card_sent=sent_class, time='', logo_path='Logos\esv.png', card_title=text['title'],
-                                         url='https://www.esv.org/' + text['urlBookChapter'],
+            html_card = HTML_CARD.format(id=i, card_sent=sent_class, time='', logo_path='Logos\esv.png',
+                                         card_title=text['title'], url='https://www.esv.org/' + text['urlBookChapter'],
                                          card_text=text['textMark'])
 
             texts.append({"id": text['id'], "title": text['title'], "sentiment": text['sentiment'],
