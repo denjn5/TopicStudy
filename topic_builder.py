@@ -15,7 +15,6 @@ import json
 from datetime import datetime
 import graph_database
 
-
 # GLOBALS
 OUTPUT_DIR = 'Output/'
 TEXTS_DIR = 'Data/'
@@ -38,7 +37,7 @@ class TopicBuilder(object):
         # Meta
         self.corpus_name = corpus_name.replace(' ', '')  # (str) The name of the set (or corpus) of texts.
         self.text_id = ""  # This is a bit of a hack. When I dive recursively into the phrases, when I get deep
-            # lose the connection to the orig verse. This helps me retain it.
+        # lose the connection to the orig verse. This helps me retain it.
 
         # Settings
         self.use_graph_db = use_graph_db
@@ -48,7 +47,7 @@ class TopicBuilder(object):
         self.texts = corpus
         self.topics = []  # Holds found Topics (basic tracking when graph db isn't available)
         self.model_output = {'name': corpus_name,
-                                   'run_date': datetime.now().strftime("%Y-%m-%d %H:%M")}  # For results as json
+                             'run_date': datetime.now().strftime("%Y-%m-%d %H:%M")}  # For results as json
 
         # TODO: Unneeded?
         self.phrases = {}
@@ -65,8 +64,6 @@ class TopicBuilder(object):
 
         if use_graph_db:
             self.gt = graph_database.GraphManager(corpus_name)  # Fire up the graph database interface
-
-
 
     def compare(self, orig_topics, min_count=2):
         """
@@ -129,7 +126,6 @@ class TopicBuilder(object):
 
             for token in text['tokens']:
                 if token.pos in NOUNS and token.i > skip_ahead:
-
                     # # Capitalize NERs (named entities)
                     # topic_word = token.lemma_ if token.ent_type_ == '' else token.lemma_.upper()
                     #
@@ -150,7 +146,6 @@ class TopicBuilder(object):
 
 
                     skip_ahead = self.analyze_phrase(token, "TEXT", skip_ahead)
-
 
     def analyze_phrase(self, token, source_type, skip_ahead, source_id=''):
         """
@@ -174,9 +169,13 @@ class TopicBuilder(object):
         for text in self.texts:
             if text['id'] == self.text_id:
                 text['topics'].add(topic_word)
-                #text['textMark'] = re.sub(r'\b' + token_str + r'\b([^<])', '<mark>' + token_str + '</mark>\g<0>', text['textMark'])
 
-                # text['textMark'] = text['textMark'].replace(token_str, "<mark class='{0}'>{0}</mark>".format(token_str))
+                # If this word hasn't been found before (in this text), then look for it and highlight
+                if token_str not in text['topicsMark']:
+                    # text['textMark'] = text['textMark'].replace(token_str,  "<mark class='{0}'>{0}</mark>".format(token_str))
+                    text['textMark'] = re.sub(r'(?<=[^>])(\b' + token_str + r'\b)',
+                                              "<mark class=\'x" + topic_word + "x\'>\g<0></mark>", text['textMark'])
+                    text['topicsMark'].add(token_str)
 
         # If the Topic and Subtree Phrase are equal, write the Topic and link it directly to the original Text.
         if len(subtree) == 1:

@@ -5,3 +5,11 @@ for a in x:
     a['rank'] = r
     ct = a['size']
     print(a)
+
+
+                # If this word hasn't been found before (in this text), then look for it and highlight
+                if token_str not in text['topicsMark']:
+                    # text['textMark'] = text['textMark'].replace(token_str,  "<mark class='{0}'>{0}</mark>".format(token_str))
+                    text['textMark'] = re.sub(r"(?<=[^>])(\b' + token_str + r'\b)",
+                                              "<mark>\g<0></mark>", text['textMark'])
+                    text['topicsMark'].add(token_str)

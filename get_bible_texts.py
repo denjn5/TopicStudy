@@ -68,7 +68,8 @@ class getBibleTexts(object):
             text = text.replace("'", "").replace('"', '').replace('  ', ' ')
 
             self.texts.append({"id": bk + '_' + ch, "author": "", "title": bk + ' ' + ch, "sentiment": 0, "source": "",
-                               "text": text, "textMark": text, "topics": set(), "urlQueryString": bk + '+' + ch})
+                               "text": text, "textMark": text, "topics": set(), "topicsMark": set(),
+                               "urlQueryString": bk + '+' + ch})
 
         return self.texts
 
