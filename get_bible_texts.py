@@ -19,9 +19,9 @@ Text parsing work:
 """
 
 # FEATURE: Can I run a compare of all chapters in the Bible to see which ones have the greatest overlap?
-# FEATURE: Should I prep images for the htmlCard?
 
 # IMPORTS
+import re
 import pandas as pd
 import json
 import graph_database
@@ -37,18 +37,13 @@ HTML_CARD = "<div class='card bs-callout {card_sent}' id='c{id}'><div class='car
 
 
 class getBibleTexts(object):
-    def __init__(self, book, chapter=""):
+    def __init__(self, book):
         """
-        
+        Get texts from text file and prepare for analysis.
         :param book: The book for analysis. Either a Bible Book (e.g., Genesis) or "Bible"
-        :param chapter: An optional chapter reference
         """
-        self.texts = []  # a list of dictionaries; each item contains one verse with its attributes
-        # TODO: Should a text really be a chapter? That'd simplify large block compares. And let me test highlites.
-        self.book = book  # the requested Bible book or full Bible
-        self.chapter = chapter
-        self.reference = book + (('_' + str(chapter)) if chapter else '')
-        self.title = book + ((' ' + str(chapter)) if chapter else '')
+        self.texts = []  # a list of dictionaries; each item contains one chapter with its attributes
+        self.corpus = book  # the requested Bible book or full Bible
 
     def get_texts(self):
         """
@@ -56,25 +51,24 @@ class getBibleTexts(object):
         :return: list of dictionaries
         """
         # READ KJV (kjv.csv) or ov.csv file
-        df = pd.read_csv(SRC_DIR + 'ov.csv', sep='|')
+        df = pd.read_csv(SRC_DIR + 'ovbc.csv', sep='|')
 
         # GET SELECTION
-        if self.book == 'bible':
+        if self.corpus == 'bible':
             selection = df
-        elif self.chapter:
-            selection = df[(df['book'] == self.book) & (df['chapter'] == self.chapter)]
         else:
-            selection = df[(df['book'] == self.book)]
+            selection = df[(df['book'] == self.corpus)]
 
         # Move to standard list structure
         for i, row in selection.iterrows():
-            url_book_chapter = row['book'] + '+' + str(int(row['chapter']))
-            title = str(row['book'] + ' ' + str(int(row['chapter'])) + ':' + str(int(row['verse'])))
-            text_id = str(row['book'] + '_' + str(int(row['chapter'])) + ':' + str(int(row['verse'])))
-            text = row['text'].replace("'", "").replace('"', '')
+            bk = row['book']
+            ch = str(int(row['chapter']))
+            # TODO: Put more of our replace in the regex? .replace may be faster, but we doing multiple passes...
+            text = re.sub(r'<span[^>]+>|</span>', '', row['text'])
+            text = text.replace("'", "").replace('"', '').replace('  ', ' ')
 
-            self.texts.append({"id": text_id, "author": "", "title": title, "sentiment": 0.5, "source": "",
-                               "text": text, "textMark": text, "topics": set(), "urlBookChapter": url_book_chapter})
+            self.texts.append({"id": bk + '_' + ch, "author": "", "title": bk + ' ' + ch, "sentiment": 0, "source": "",
+                               "text": text, "textMark": text, "topics": set(), "urlQueryString": bk + '+' + ch})
 
         return self.texts
 
@@ -95,20 +89,27 @@ class getBibleTexts(object):
             # gt.close()
 
     def export_texts(self, save_location):
-        file_name = 'Texts-{}.json'.format(self.reference)
+        """
+        Gets raw texts list ready for save by creating the htmlCard and jettisoning fields that we no longer need.
+        NOTE: Assumes that we've already populated **sentiment** and **topics** (outside of this class).
+        :param save_location: The save directory (e.g., 'Output/')
+        :return: None
+        """
+        file_name = 'Texts-{}.json'.format(self.corpus)
 
-        texts = []
+        save_texts = []
         for i, text in enumerate(self.texts):
-            sent_class = 'bs-callout-neg' if text['sentiment'] < -0.33 else ('bs-callout-pos' if text['sentiment'] > 0.33 else '')
+            sent_class = 'bs-callout-neg' if text['sentiment'] < -0.33 else (
+            'bs-callout-pos' if text['sentiment'] > 0.33 else '')
             html_card = HTML_CARD.format(id=i, card_sent=sent_class, time='', logo_path='Logos\esv.png',
-                                         card_title=text['title'], url='https://www.esv.org/' + text['urlBookChapter'],
+                                         card_title=text['title'], url='https://www.esv.org/' + text['urlQueryString'],
                                          card_text=text['textMark'])
 
-            texts.append({"id": text['id'], "title": text['title'], "sentiment": text['sentiment'],
-                          "text": text['text'], "topics": list(text['topics']), "htmlCard": html_card})
+            save_texts.append({"id": text['id'], "title": text['title'], "sentiment": text['sentiment'],
+                               "text": text['text'], "topics": list(text['topics']), "htmlCard": html_card})
 
         with open(save_location + file_name, 'w') as f:
-            json.dump(texts, f)
+            json.dump(save_texts, f)
 
 # if __name__ == "__main__":
 #     main("psa 23")

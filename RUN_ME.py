@@ -20,9 +20,9 @@ MAX_TOPICS = 50
 
 # RUN
 # Get the Corpus
-bt = get_bible_texts.getBibleTexts("Luke")  # Get properly formatted corpus (dictionary: { reference: text })
+bt = get_bible_texts.getBibleTexts("Revelation")  # Get properly formatted corpus (a python list of dictionaries).
 texts = bt.get_texts()
-reference = bt.reference
+corpus = bt.corpus
 if USE_GRAPH_DB:
     get_bible_texts.db_add_posts(texts, db_start_fresh=False)
 
@@ -31,7 +31,7 @@ sent = sentiment.calculateSentiment(texts)
 sent.add_sentiment()
 
 # Run it through Topic Builder (tokenizer, graph db set up, find topics)
-tb = topic_builder.TopicBuilder(reference, texts, USE_GRAPH_DB, MAX_TOPICS)
+tb = topic_builder.TopicBuilder(corpus, texts, USE_GRAPH_DB, MAX_TOPICS)
 tb.nouns()
 
 # Word2Vec; find key sentences, and key words.

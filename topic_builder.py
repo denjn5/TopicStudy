@@ -9,6 +9,7 @@ Explains POS Tags: http://universaldependencies.org/en/pos/all.html#al-en-pos/DE
 # IMPORTS
 import spacy
 import spacy.symbols as ss
+import re
 import string
 import json
 from datetime import datetime
@@ -166,13 +167,16 @@ class TopicBuilder(object):
 
         # Get the subtree of the token & lemmatize current token (upper if proper noun)
         subtree = list(token.subtree)
+        token_str = str(token)
         topic_word = token.lemma_ if token.ent_type_ == '' else token.lemma_.upper()
 
         # Found a Topic, note that in the Data data store
         for text in self.texts:
             if text['id'] == self.text_id:
                 text['topics'].add(topic_word)
-                text['textMark'] = text['textMark'].replace(str(token), "<mark class='topic_word'>" + str(token) + "</mark>")
+                #text['textMark'] = re.sub(r'\b' + token_str + r'\b([^<])', '<mark>' + token_str + '</mark>\g<0>', text['textMark'])
+
+                # text['textMark'] = text['textMark'].replace(token_str, "<mark class='{0}'>{0}</mark>".format(token_str))
 
         # If the Topic and Subtree Phrase are equal, write the Topic and link it directly to the original Text.
         if len(subtree) == 1:
