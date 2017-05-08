@@ -22,7 +22,7 @@ TEXTS_DIR = 'Data/'
 OUTPUT_DIR = 'Output/'
 
 
-class AnalyticsFactory(object):
+class FindRelationships(object):
     """
     Runs texts through a number of analytics to identify word relationships and key sentences.
     """
@@ -33,7 +33,7 @@ class AnalyticsFactory(object):
         :param texts: The texts that we want to analyze.
         :param corpus_name: The differentiating file name for saving/retrieving
         """
-        self.corpus_name = corpus_name.replace(' ', '')
+        self.corpus_name = corpus_name
         self.texts = texts
         self.model_output = {"AnalyticsFactor": {'run_date': datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
                                                  'corpus_name': self.corpus_name}}

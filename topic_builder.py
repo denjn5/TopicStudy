@@ -35,7 +35,7 @@ class TopicBuilder(object):
         :param use_graph_db: (bool) Is neo4j installed?
         """
         # Meta
-        self.corpus_name = corpus_name.replace(' ', '')  # (str) The name of the set (or corpus) of texts.
+        self.corpus_name = corpus_name  # (str) The name of the set (or corpus) of texts.
         self.text_id = ""  # This is a bit of a hack. When I dive recursively into the phrases, when I get deep
         # lose the connection to the orig verse. This helps me retain it.
 
@@ -64,6 +64,13 @@ class TopicBuilder(object):
 
         if use_graph_db:
             self.gt = graph_database.GraphManager(corpus_name)  # Fire up the graph database interface
+
+    def summarize_texts(self):
+        summary = {}
+        # summarized_texts['tokens'] = [token for token in text['tokens'] for text in self.texts]
+        summary['text'] = ''.join([text['text'] for text in self.texts])
+
+        return summary
 
     def compare(self, orig_topics, min_count=2):
         """
@@ -165,15 +172,15 @@ class TopicBuilder(object):
         token_str = str(token)
         topic_word = token.lemma_ if token.ent_type_ == '' else token.lemma_.upper()
 
-        # Found a Topic, note that in the Data data store
+        # Found a Topic, note that in the Texts data store
         for text in self.texts:
             if text['id'] == self.text_id:
                 text['topics'].add(topic_word)
 
                 # If this word hasn't been found before (in this text), then look for it and highlight
                 if token_str not in text['topicsMark']:
-                    # text['textMark'] = text['textMark'].replace(token_str,  "<mark class='{0}'>{0}</mark>".format(token_str))
-                    text['textMark'] = re.sub(r'(?<=[^>])(\b' + token_str + r'\b)',
+
+                    text['textMark'] = re.sub(r'(?<=[^>^<^/])(\b' + token_str + r'\b)',
                                               "<mark class=\'x" + topic_word + "x\'>\g<0></mark>", text['textMark'])
                     text['topicsMark'].add(token_str)
 

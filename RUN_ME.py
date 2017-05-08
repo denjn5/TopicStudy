@@ -20,9 +20,9 @@ MAX_TOPICS = 50
 
 # RUN
 # Get the Corpus
-bt = get_bible_texts.getBibleTexts("Revelation")  # Get properly formatted corpus (a python list of dictionaries).
+bt = get_bible_texts.getBibleTexts("Hosea")  # Get properly formatted corpus (a python list of dictionaries).
 texts = bt.get_texts()
-corpus = bt.corpus
+corpus_name = bt.corpus_name
 if USE_GRAPH_DB:
     get_bible_texts.db_add_posts(texts, db_start_fresh=False)
 
@@ -31,16 +31,19 @@ sent = sentiment.calculateSentiment(texts)
 sent.add_sentiment()
 
 # Run it through Topic Builder (tokenizer, graph db set up, find topics)
-tb = topic_builder.TopicBuilder(corpus, texts, USE_GRAPH_DB, MAX_TOPICS)
+tb = topic_builder.TopicBuilder(corpus_name, texts, USE_GRAPH_DB, MAX_TOPICS)
 tb.nouns()
+summary = tb.summarize_texts()
 
 # Word2Vec; find key sentences, and key words.
-# ana = ana_factory.AnalyticsFactory(new_texts, NEW_CORPUS)
-# ana.key_sentences(tb.text_concat_raw())
-# ana.keywords(tb.text_concat_raw())
-# ana.word2vec(tb.text_token_concat_clean())
-# ana.doc2vec(tb.text_token_dict_clean())
-# ana.export_json()
+fr = find_relationships.FindRelationships(texts, corpus_name)
+
+summary['keySentences'] = fr.key_sentences(summary['text'])
+# TODO: send in clean tokens to keywords
+summary['keyWords'] = fr.keywords(summary['text'])
+# fr.word2vec(tb.text_token_concat_clean())
+# fr.doc2vec(tb.text_token_dict_clean())
+# fr.export_json()
 
 
 # Compare with original Corpus.

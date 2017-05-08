@@ -43,7 +43,7 @@ class getBibleTexts(object):
         :param book: The book for analysis. Either a Bible Book (e.g., Genesis) or "Bible"
         """
         self.texts = []  # a list of dictionaries; each item contains one chapter with its attributes
-        self.corpus = book  # the requested Bible book or full Bible
+        self.corpus_name = book  # the requested Bible book or full Bible
 
     def get_texts(self):
         """
@@ -54,10 +54,10 @@ class getBibleTexts(object):
         df = pd.read_csv(SRC_DIR + 'ovbc.csv', sep='|')
 
         # GET SELECTION
-        if self.corpus == 'bible':
+        if self.corpus_name == 'bible':
             selection = df
         else:
-            selection = df[(df['book'] == self.corpus)]
+            selection = df[(df['book'] == self.corpus_name)]
 
         # Move to standard list structure
         for i, row in selection.iterrows():
@@ -96,7 +96,7 @@ class getBibleTexts(object):
         :param save_location: The save directory (e.g., 'Output/')
         :return: None
         """
-        file_name = 'Texts-{}.json'.format(self.corpus)
+        file_name = 'Texts-{}.json'.format(self.corpus_name)
 
         save_texts = []
         for i, text in enumerate(self.texts):
