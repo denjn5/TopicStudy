@@ -178,11 +178,22 @@ class TopicBuilder(object):
                 text['topics'].add(topic_word)
 
                 # If this word hasn't been found before (in this text), then look for it and highlight
-                if token_str not in text['topicsMark']:
+                if token_str not in text['topicsFound']:
+                    # add entry to the "found" dict for this topic_word (if it's not there already); it's a set!
+                    if topic_word not in text['found']:
+                        text['found'][topic_word] = set()
 
-                    text['textMark'] = re.sub(r'(?<=[^>^<^/])(\b' + token_str + r'\b)',
-                                              "<mark class=\'x" + topic_word + "x\'>\g<0></mark>", text['textMark'])
-                    text['topicsMark'].add(token_str)
+                    # look for this pattern in our text, add begin/end indexes to the set in the dict
+                    pattern = re.compile(r'(?<=[^>^<^/])(\b' + token_str + r'\b)', flags=re.IGNORECASE)
+                    finds = re.finditer(pattern, text['text'])
+                    for find in finds:
+                        text['found'][topic_word].add((find.start(0), find.end(0)))
+
+                    # text['textMark'] = re.sub(r'(?<=[^>^<^/])(\b' + token_str + r'\b)',
+                    #                           "<mark class=\'x" + topic_word + "x\'>\g<0></mark>", text['textMark'])
+
+                    # mark this token_str as found so that we don't look for this exact string again
+                    text['topicsFound'].add(token_str)
 
         # If the Topic and Subtree Phrase are equal, write the Topic and link it directly to the original Text.
         if len(subtree) == 1:
