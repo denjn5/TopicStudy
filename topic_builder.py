@@ -36,7 +36,7 @@ class TopicBuilder(object):
         """
         # Meta
         self.corpus_name = corpus_name  # (str) The name of the set (or corpus) of texts.
-        self.text_id = ""  # This is a bit of a hack. When I dive recursively into the phrases, when I get deep
+        self.current_id = ""  # This is a bit of a hack. When I dive recursively into the phrases, when I get deep
         # lose the connection to the orig verse. This helps me retain it.
 
         # Settings
@@ -126,32 +126,13 @@ class TopicBuilder(object):
         """
 
         for text in self.texts:
-            self.text_id = text['id']  # text_id always remembers where we're at as we loop through our texts
+            self.current_id = text['id']  # text_id always remembers where we're at as we loop through our texts
 
             # for reference, text in self._text_tokens_dict.items():
             skip_ahead = -1
 
             for token in text['tokens']:
                 if token.pos in NOUNS and token.i > skip_ahead:
-                    # # Capitalize NERs (named entities)
-                    # topic_word = token.lemma_ if token.ent_type_ == '' else token.lemma_.upper()
-                    #
-                    # text['topics'].add(topic_word)  # Found a Topic. Note that in the current Text.
-                    #
-                    # # Loop through topics to increment
-                    # found = False
-                    # for topic in self.topics:
-                    #     if topic['name'] == topic_word:
-                    #         topic['size'] += 1
-                    #         topic['count'] += 1
-                    #         break
-                    #
-                    # if not found:
-                    #     self.topics.append({'name': topic_word, 'size': 1, 'count': 1, 'children': []})
-                    #
-                    # # Also, add it to the graph db...
-
-
                     skip_ahead = self.analyze_phrase(token, "TEXT", skip_ahead)
 
     def analyze_phrase(self, token, source_type, skip_ahead, source_id=''):
@@ -162,7 +143,7 @@ class TopicBuilder(object):
         :param source_type: (str) "TEXT" or "PHRASE"
         :param skip_ahead: (int) All words before this index (token.i) have been addressed; 
             avoids double-counting and loops 
-        :param source_id: (str) Usually this will be the self.text_id In that case, no need to send it. However, 
+        :param source_id: (str) Usually this will be the self.current_id In that case, no need to send it. However, 
             when we're being recursive, this could be the phrase that another phrase is derived from.
         :return: (int) The new skip_ahead value
         """
@@ -172,28 +153,27 @@ class TopicBuilder(object):
         token_str = str(token)
         topic_word = token.lemma_ if token.ent_type_ == '' else token.lemma_.upper()
 
-        # Found a Topic, note that in the Texts data store
-        for text in self.texts:
-            if text['id'] == self.text_id:
-                text['topics'].add(topic_word)
+        # Found a Topic (we're confident it's a noun); record it in the Texts data store
+        # We need to loop through the list of texts until we find the one where currently studying.
+        # Then only proceed if we haven't already "found" the instances of this word in this text.
+        for text in self.texts:  # Loop through all of the texts until...
+            if text['id'] == self.current_id and token_str not in text['topicsFound']:  # ...we've found the "current" text
+                # text['topics'].add(topic_word)
 
-                # If this word hasn't been found before (in this text), then look for it and highlight
-                if token_str not in text['topicsFound']:
-                    # add entry to the "found" dict for this topic_word (if it's not there already); it's a set!
-                    if topic_word not in text['found']:
-                        text['found'][topic_word] = set()
+                # Add entry to the "found" dict for this topic_word (if it's not there already); it's a set!
+                # We record lemmatized topics from our variable topic_word (e.g. run), but as we iterate through we'll
+                # end up searching for it's various forms (e.g., runs, ran) in the topic_str.
+                if topic_word not in text['topics']:
+                    text['topics'][topic_word] = set()
 
-                    # look for this pattern in our text, add begin/end indexes to the set in the dict
-                    pattern = re.compile(r'(?<=[^>^<^/])(\b' + token_str + r'\b)', flags=re.IGNORECASE)
-                    finds = re.finditer(pattern, text['text'])
-                    for find in finds:
-                        text['found'][topic_word].add((find.start(0), find.end(0)))
+                # look for this noun in our text (the unlemmatized topic_str), add begin/end indexes to the set
+                pattern = re.compile(r'(\b' + token_str + r'\b)', flags=re.IGNORECASE)
+                finds = re.finditer(pattern, text['text'])
+                for find in finds:
+                    text['topics'][topic_word].add((find.start(0) - 1, find.end(0) - 1))
 
-                    # text['textMark'] = re.sub(r'(?<=[^>^<^/])(\b' + token_str + r'\b)',
-                    #                           "<mark class=\'x" + topic_word + "x\'>\g<0></mark>", text['textMark'])
-
-                    # mark this token_str as found so that we don't look for this exact string again
-                    text['topicsFound'].add(token_str)
+                # Now that we've found this token_str, let's not do that again.
+                text['topicsFound'].add(token_str)
 
         # If the Topic and Subtree Phrase are equal, write the Topic and link it directly to the original Text.
         if len(subtree) == 1:
@@ -202,7 +182,7 @@ class TopicBuilder(object):
                 if source_type == "PHRASE":
                     self.gt.phrase_to_topic(source_id, topic_word)
                 else:  # source is a TEXT
-                    self.gt.text_to_topic(self.text_id, topic_word)
+                    self.gt.text_to_topic(self.current_id, topic_word)
 
         # The Subtree Phrase is bigger than the Topic. Create the Phrase, then save to the db and link
         else:
@@ -212,10 +192,10 @@ class TopicBuilder(object):
             verbatim = ' '.join([str(word) for word in subtree]).replace(" ,", ",").replace(" ;", ";")
             verbatim = verbatim.strip(string.punctuation)
 
-            # Track phrase_ids in hierarchical arrays and dictionaries (which translates nicely to json).
-            found_topic = False
-            for topic in self.topics:
-                if topic['name'] == topic_word:
+            # Track phrase_ids in hierarchical arrays and dictionaries (which translate nicely to json).
+            found_topic = False  # start with the assumption that this topic isn't yet in our list, then...
+            for topic in self.topics:  # ...loop through topics...
+                if topic['name'] == topic_word:  # ...until you've found it
                     topic['size'] += 1
                     topic['count'] += 1
 
@@ -232,10 +212,11 @@ class TopicBuilder(object):
                     if not found_phrase:
                         topic['children'].append({'name': verbatim, 'phrase_id': phrase_id, 'size': 1})
 
-                    break  # We've found or added the phrase, stop looing
+                    break  # We've found or added the phrase, stop looping
 
             # Didn't find the topic? No problem, add it in.
             if not found_topic:
+                # TODO: I've added in a new topic, but haven't added in the phrase...
                 self.topics.append({'name': topic_word, 'size': 1, 'count': 1, 'children': []})
 
             if self.use_graph_db:
@@ -247,10 +228,11 @@ class TopicBuilder(object):
                 if source_type == "PHRASE":
                     self.gt.phrase_to_phrase(source_id, phrase_id)
                 else:  # source is SOURCE
-                    self.gt.text_to_phrase(self.text_id, phrase_id)
+                    self.gt.text_to_phrase(self.current_id, phrase_id)
 
             # Are there additional nouns in the Subtree? Loop through them and call this method recursively.
             nouns = [word for word in subtree if word.pos in NOUNS and word.i > skip_ahead]
+            # TODO: Are only nouns getting through here?  What about "+"s?
             for n in range(0, len(nouns)):
                 if n > 0 and nouns[n].i > skip_ahead:
                     skip_ahead = self.analyze_phrase(nouns[n], "PHRASE", skip_ahead, source_id=phrase_id)

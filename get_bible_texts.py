@@ -30,10 +30,10 @@ import graph_database
 SRC_DIR = 'Data/'
 SAVE_DIR = 'Output/'
 
-HTML_CARD = "<div class='card bs-callout {card_sent}' id='c{id}'><div class='cardTime'>{time}</div>" \
+HTML_CARD = "<div class='card bs-callout {card_sent}' id='card_{id}'><div class='cardTime'>{time}</div>" \
             "<a href='{url}' target='_blank'><img src='{logo_path}' height=40 class='cardImage' /></a>" \
             "<div class='cardTitle h4'><a href='javascript:void(0);' onclick='showFullText({id})'>{card_title}</a></div>" \
-            "<div class='cardText'>{card_text}</div></div>"
+            "<div class='cardText' id='text_{id}'>{card_text}</div></div>"
 
 
 class getBibleTexts(object):
@@ -67,9 +67,9 @@ class getBibleTexts(object):
             text = re.sub(r'<span[^>]+>|</span>', '', row['text'])
             text = text.replace("'", "").replace('"', '').replace('  ', ' ')
 
-            self.texts.append({"id": bk + '_' + ch, "author": "", "title": bk + ' ' + ch, "sentiment": 0, "source": "",
-                               "text": text, "topics": set(), "topicsFound": set(), "found": {},
-                               "urlQueryString": bk + '+' + ch})
+            # self.texts.append({"id": bk + '_' + ch, "author": "", "title": bk + ' ' + ch, "sentiment": 0, "source": "",
+            self.texts.append({"id": i, "author": "", "title": bk + ' ' + ch, "sentiment": 0, "source": "",
+                               "text": text, "topics": {}, "topicsFound": set(), "urlQueryString": bk + '+' + ch})
             # "textMark": text,
 
         return self.texts
@@ -100,18 +100,17 @@ class getBibleTexts(object):
         file_name = 'Texts-{}.json'.format(self.corpus_name)
 
         save_texts = []
-        for i, text in enumerate(self.texts):
+        for text in self.texts:
             sent_class = 'bs-callout-neg' if text['sentiment'] < -0.33 else (
             'bs-callout-pos' if text['sentiment'] > 0.33 else '')
-            html_card = HTML_CARD.format(id=i, card_sent=sent_class, time='', logo_path='Logos\esv.png',
+            html_card = HTML_CARD.format(id=text['id'], card_sent=sent_class, time='', logo_path='Logos\esv.png',
                                          card_title=text['title'], url='https://www.esv.org/' + text['urlQueryString'],
                                          card_text=text['text'])
 
-            found = {k: list(v) for k, v in text['found'].items()}  # turn dict sets into dict lists
+            topics = {k: sorted(list(v), reverse=True) for k, v in text['topics'].items()}  # turn dict sets into dict lists
 
-            save_texts.append({"id": text['id'], "title": text['title'], "sentiment": text['sentiment'],
-                               "text": text['text'], "topics": list(text['topics']), "found": found,
-                               "htmlCard": html_card})
+            save_texts.append({"id": str(text['id']), "title": text['title'], "sentiment": text['sentiment'],
+                               "text": text['text'], "topics": topics, "htmlCard": html_card})
 
         with open(save_location + file_name, 'w') as f:
             json.dump(save_texts, f)
