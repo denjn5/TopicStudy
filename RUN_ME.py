@@ -20,7 +20,7 @@ MAX_TOPICS = 50
 
 # RUN
 # Get the Corpus
-bt = get_bible_texts.getBibleTexts("Hosea")  # Get properly formatted corpus (a python list of dictionaries).
+bt = get_bible_texts.getBibleTexts("Jonah")  # Get properly formatted corpus (a python list of dictionaries).
 texts = bt.get_texts()
 corpus_name = bt.corpus_name
 if USE_GRAPH_DB:

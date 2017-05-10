@@ -150,30 +150,10 @@ class TopicBuilder(object):
 
         # Get the subtree of the token & lemmatize current token (upper if proper noun)
         subtree = list(token.subtree)
-        token_str = str(token)
-        topic_word = token.lemma_ if token.ent_type_ == '' else token.lemma_.upper()
+        topic_verbatim = str(token)  # this is the "verbatim" of the word
+        topic_word = token.lemma_ if token.ent_type_ == '' else token.lemma_.upper()  # the lemmatized version
 
-        # Found a Topic (we're confident it's a noun); record it in the Texts data store
-        # We need to loop through the list of texts until we find the one where currently studying.
-        # Then only proceed if we haven't already "found" the instances of this word in this text.
-        for text in self.texts:  # Loop through all of the texts until...
-            if text['id'] == self.current_id and token_str not in text['topicsFound']:  # ...we've found the "current" text
-                # text['topics'].add(topic_word)
-
-                # Add entry to the "found" dict for this topic_word (if it's not there already); it's a set!
-                # We record lemmatized topics from our variable topic_word (e.g. run), but as we iterate through we'll
-                # end up searching for it's various forms (e.g., runs, ran) in the topic_str.
-                if topic_word not in text['topics']:
-                    text['topics'][topic_word] = set()
-
-                # look for this noun in our text (the unlemmatized topic_str), add begin/end indexes to the set
-                pattern = re.compile(r'(\b' + token_str + r'\b)', flags=re.IGNORECASE)
-                finds = re.finditer(pattern, text['text'])
-                for find in finds:
-                    text['topics'][topic_word].add((find.start(0) - 1, find.end(0) - 1))
-
-                # Now that we've found this token_str, let's not do that again.
-                text['topicsFound'].add(token_str)
+        self.add_topic_to_text(topic_word, topic_verbatim)
 
         # If the Topic and Subtree Phrase are equal, write the Topic and link it directly to the original Text.
         if len(subtree) == 1:
@@ -189,7 +169,7 @@ class TopicBuilder(object):
             # phrase_id: a simplified representation of this phrase, used to combine similar phrases
             phrase_id = ''.join([(str(word) if word.lemma_ == '-PRON-' else word.lemma_) for word in subtree])
             phrase_id = ''.join(char for char in phrase_id if char not in string.punctuation)
-            verbatim = ' '.join([str(word) for word in subtree]).replace(" ,", ",").replace(" ;", ";")
+            verbatim = ' '.join([str(word) for word in subtree])  # .replace(" ,", ",").replace(" ;", ";")
             verbatim = verbatim.strip(string.punctuation)
 
             # Track phrase_ids in hierarchical arrays and dictionaries (which translate nicely to json).
@@ -206,6 +186,7 @@ class TopicBuilder(object):
                         if phrase['phrase_id'] == phrase_id:
                             phrase['name'] = verbatim
                             phrase['size'] += 1
+                            self.add_topic_to_text(phrase_id, verbatim)
                             found = True
                             break
 
@@ -214,10 +195,10 @@ class TopicBuilder(object):
 
                     break  # We've found or added the phrase, stop looping
 
-            # Didn't find the topic? No problem, add it in.
+            # Didn't find the topic? No problem, add it in. And the child phrase.
             if not found_topic:
-                # TODO: I've added in a new topic, but haven't added in the phrase...
-                self.topics.append({'name': topic_word, 'size': 1, 'count': 1, 'children': []})
+                self.topics.append({'name': topic_word, 'size': 1, 'count': 1,
+                                    'children': [{'name': verbatim, 'phrase_id': phrase_id, 'size': 1}]})
 
             if self.use_graph_db:
                 self.gt.topic(topic_word)
@@ -239,6 +220,31 @@ class TopicBuilder(object):
 
         # skip_ahead: The index of the final word addressed in the Subtree. This avoids dupe work.
         return subtree[-1].i
+
+
+    def add_topic_to_text(self, string_id, string_verbatim):
+        # Found a Topic (we're confident it's a noun); record it in the Texts data store
+        # We need to loop through the list of texts until we find the one where currently studying.
+        # Then only proceed if we haven't already "found" the instances of this word in this text.
+        for text in self.texts:  # Loop through all of the texts until...
+            if text['id'] == self.current_id and string_verbatim not in text['topicsFound']:  # ...we've found the "current" text
+                # text['topics'].add(topic_word)
+
+                # Add entry to the "found" dict for this topic_word (if it's not there already); it's a set!
+                # We record lemmatized topics from our variable topic_word (e.g. run), but as we iterate through we'll
+                # end up searching for it's various forms (e.g., runs, ran) in the topic_str.
+                if string_id not in text['topics']:
+                    text['topics'][string_id] = set()
+
+                # look for this noun in our text (the unlemmatized topic_str), add begin/end indexes to the set
+                pattern = re.compile(r'(\b' + string_verbatim + r'\b)', flags=re.IGNORECASE)
+                finds = re.finditer(pattern, text['text'])
+                for find in finds:
+                    text['topics'][string_id].add((find.start(0) - 1, find.end(0) - 1))
+
+                # Now that we've found this topic_verbatim, let's not do that again.
+                text['topicsFound'].add(string_verbatim)
+
 
     def export_topics(self, save_location, date_file_name=True):
         """
