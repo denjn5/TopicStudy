@@ -25,11 +25,9 @@ import re
 import pandas as pd
 import json
 import graph_database
+import config
 
 # GLOBALS
-SRC_DIR = 'Data/'
-SAVE_DIR = 'Output/'
-
 HTML_CARD = "<div class='card bs-callout {card_sent}' id='card_{id}'><div class='cardTime'>{time}</div>" \
             "<a href='{url}' target='_blank'><img src='{logo_path}' height=40 class='cardImage' /></a>" \
             "<div class='cardTitle h4'><a href='javascript:void(0);' onclick='showFullText({id})'>{card_title}</a></div>" \
@@ -51,7 +49,7 @@ class getBibleTexts(object):
         :return: list of dictionaries
         """
         # READ KJV (kjv.csv) or ov.csv file
-        df = pd.read_csv(SRC_DIR + 'ovbc.csv', sep='|')
+        df = pd.read_csv(config.SRC_DIR + 'ovbc.csv', sep='|')
 
         # GET SELECTION
         if self.corpus_name == 'bible':
@@ -90,11 +88,10 @@ class getBibleTexts(object):
             gt.text(text['id'], text['text'])
             # gt.close()
 
-    def export_texts(self, save_location):
+    def export_texts(self):
         """
         Gets raw texts list ready for save by creating the htmlCard and jettisoning fields that we no longer need.
         NOTE: Assumes that we've already populated **sentiment** and **topics** (outside of this class).
-        :param save_location: The save directory (e.g., 'Output/')
         :return: None
         """
         file_name = 'Texts-{}.json'.format(self.corpus_name)
@@ -112,7 +109,7 @@ class getBibleTexts(object):
             save_texts.append({"id": str(text['id']), "title": text['title'], "sentiment": text['sentiment'],
                                "text": text['text'], "topics": topics, "htmlCard": html_card})
 
-        with open(save_location + file_name, 'w') as f:
+        with open(config.SAVE_DIR + file_name, 'w') as f:
             json.dump(save_texts, f)
 
 # if __name__ == "__main__":

@@ -11,16 +11,13 @@ import find_relationships
 
 # GLOBALS: Used these variables to define most common run parameters.
 # Note that most methods have settable parameters that you may want to adjust.
-OUTPUT_DIR = 'Output/'
 ORIG_CORPUS = ""  # An optional corpus (used for comparison); formatting may be critical for get_.
-
 USE_GRAPH_DB = False
-MAX_TOPICS = 50
 
 
 # RUN
 # Get the Corpus
-bt = get_bible_texts.getBibleTexts("Jonah")  # Get properly formatted corpus (a python list of dictionaries).
+bt = get_bible_texts.getBibleTexts("Proverbs")  # Get properly formatted corpus (a python list of dictionaries).
 texts = bt.get_texts()
 corpus_name = bt.corpus_name
 if USE_GRAPH_DB:
@@ -31,7 +28,7 @@ sent = sentiment.calculateSentiment(texts)
 sent.add_sentiment()
 
 # Run it through Topic Builder (tokenizer, graph db set up, find topics)
-tb = topic_builder.TopicBuilder(corpus_name, texts, USE_GRAPH_DB, MAX_TOPICS)
+tb = topic_builder.TopicBuilder(corpus_name, texts, USE_GRAPH_DB)
 tb.nouns()
 summary = tb.summarize_texts()
 
@@ -56,7 +53,7 @@ if ORIG_CORPUS:
     orig_tb = topic_builder.TopicBuilder(ORIG_CORPUS, orig_texts, use_graph_db=False)
     tb.compare(orig_tb.nouns())  # note: based on the
 
-tb.export_topics(OUTPUT_DIR, date_file_name=False)
-bt.export_texts(OUTPUT_DIR)
+tb.export_topics()
+bt.export_texts()
 
 

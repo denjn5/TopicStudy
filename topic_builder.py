@@ -14,11 +14,9 @@ import string
 import json
 from datetime import datetime
 import graph_database
+import config
 
 # GLOBALS
-OUTPUT_DIR = 'Output/'
-TEXTS_DIR = 'Data/'
-# TODO: Re-include ss.PRON, hopefully with anaphora resolution?
 NOUNS = {ss.NOUN, ss.PROPN}
 
 
@@ -53,7 +51,7 @@ class TopicBuilder(object):
         self.phrases = {}
 
         # Stop Words
-        with open(TEXTS_DIR + 'stopwords.txt', 'r') as file:
+        with open(config.SRC_DIR + 'stopwords.txt', 'r') as file:
             stopwords = set(file.read().split(' '))
 
         for text in self.texts:
@@ -132,7 +130,7 @@ class TopicBuilder(object):
             skip_ahead = -1
 
             for token in text['tokens']:
-                if token.pos in NOUNS and token.i > skip_ahead:
+                if token.pos in NOUNS and token.i > skip_ahead and re.match("^[A-Za-z0-9_-]*$", str(token)):
                     skip_ahead = self.analyze_phrase(token, "TEXT", skip_ahead)
 
     def analyze_phrase(self, token, source_type, skip_ahead, source_id=''):
@@ -158,11 +156,24 @@ class TopicBuilder(object):
         # If the Topic and Subtree Phrase are equal, write the Topic and link it directly to the original Text.
         if len(subtree) == 1:
             if self.use_graph_db:
-                # TODO: Do we use both branches of this if statement?
                 if source_type == "PHRASE":
                     self.gt.phrase_to_topic(source_id, topic_word)
                 else:  # source is a TEXT
                     self.gt.text_to_topic(self.current_id, topic_word)
+
+            # Track phrase_ids in hierarchical arrays and dictionaries (which translate nicely to json).
+            found_topic = False  # start with the assumption that this topic isn't yet in our list, then...
+            for topic in self.topics:  # ...loop through topics...
+                if topic['name'] == topic_word:  # ...until you've found it
+                    found_topic = True
+                    topic['size'] += 1
+                    topic['count'] += 1
+
+
+            # Didn't find the topic? No problem, add it in. And the child phrase.
+            if not found_topic:
+                self.topics.append({'name': topic_word, 'size': 1, 'count': 1, 'children': []})
+
 
         # The Subtree Phrase is bigger than the Topic. Create the Phrase, then save to the db and link
         else:
@@ -176,18 +187,19 @@ class TopicBuilder(object):
             found_topic = False  # start with the assumption that this topic isn't yet in our list, then...
             for topic in self.topics:  # ...loop through topics...
                 if topic['name'] == topic_word:  # ...until you've found it
+                    found_topic = True
                     topic['size'] += 1
                     topic['count'] += 1
 
                     # Topic found! Now look for the context phrase_id (either increment the phrase_id or add it).
                     found_phrase = False
                     for phrase in topic['children']:
-                        # Compare based on phrase_id, which is a genericized version of the underlying text (fewer groups)
+                        # Compare based on phrase_id, which is a genericized version of the underlying text
                         if phrase['phrase_id'] == phrase_id:
+                            found_phrase = True
                             phrase['name'] = verbatim
                             phrase['size'] += 1
                             self.add_topic_to_text(phrase_id, verbatim)
-                            found = True
                             break
 
                     if not found_phrase:
@@ -212,7 +224,8 @@ class TopicBuilder(object):
                     self.gt.text_to_phrase(self.current_id, phrase_id)
 
             # Are there additional nouns in the Subtree? Loop through them and call this method recursively.
-            nouns = [word for word in subtree if word.pos in NOUNS and word.i > skip_ahead]
+            nouns = [word for word in subtree if
+                     word.pos in NOUNS and word.i > skip_ahead and re.match("^[A-Za-z0-9_-]*$", str(word))]
             # TODO: Are only nouns getting through here?  What about "+"s?
             for n in range(0, len(nouns)):
                 if n > 0 and nouns[n].i > skip_ahead:
@@ -227,9 +240,7 @@ class TopicBuilder(object):
         # We need to loop through the list of texts until we find the one where currently studying.
         # Then only proceed if we haven't already "found" the instances of this word in this text.
         for text in self.texts:  # Loop through all of the texts until...
-            if text['id'] == self.current_id and string_verbatim not in text['topicsFound']:  # ...we've found the "current" text
-                # text['topics'].add(topic_word)
-
+            if text['id'] == self.current_id and string_verbatim not in text['topicsFound']:  # ...we find current text
                 # Add entry to the "found" dict for this topic_word (if it's not there already); it's a set!
                 # We record lemmatized topics from our variable topic_word (e.g. run), but as we iterate through we'll
                 # end up searching for it's various forms (e.g., runs, ran) in the topic_str.
@@ -246,9 +257,10 @@ class TopicBuilder(object):
                 text['topicsFound'].add(string_verbatim)
 
 
-    def export_topics(self, save_location, date_file_name=True):
+    def export_topics(self, data_date=""):
         """
         Save json_results variable to the Output directory.
+        :param data_date: YYYY-MM-DD, the date of the data
         :return: 
         """
 
@@ -277,13 +289,15 @@ class TopicBuilder(object):
             topic['size'] = topic['size'] - child_use_count
             prev_use_count = current_use_count
 
-        self.model_output["children"] = topics
+        # Prune topics over max_topics (default ~40): we stopped calcing rank over the max_topics
+        self.model_output["children"] = [topic for topic in topics if 'rank' in topic]
 
-        if date_file_name:
-            file_name = 'Topics-{}-{}.json'.format(self.corpus_name, datetime.today().strftime('%Y%m%d'))
+        if data_date:
+            date = datetime.strptime(data_date, "%Y-%m-%d").strftime('%m-%d')  # from YYYY-MM-DD to MM-DD
+            file_name = 'Topics-{}-{}.json'.format(self.corpus_name, date)
         else:
             file_name = 'Topics-{}.json'.format(self.corpus_name)
 
         # with open(save_location + 'topics_' + self.corpus_name + '.json', 'w') as f:
-        with open(save_location + file_name, 'w') as f:
+        with open(config.SAVE_DIR + file_name, 'w') as f:
             json.dump(self.model_output, f)
