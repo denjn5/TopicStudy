@@ -29,7 +29,7 @@ import config
 
 # GLOBALS
 HTML_CARD = "<div class='card bs-callout {card_sent}' id='card_{id}'><div class='cardTime'>{time}</div>" \
-            "<a href='{url}' target='_blank'><img src='{logo_path}' height=40 class='cardImage' /></a>" \
+            "<a href='{url}' target='_blank'><img src='{logo_path}' class='cardImage' /></a>" \
             "<div class='cardTitle h4'><a href='javascript:void(0);' onclick='showFullText({id})'>{card_title}</a></div>" \
             "<div class='cardText' id='text_{id}'>{card_text}</div></div>"
 
@@ -41,6 +41,7 @@ class getBibleTexts(object):
         :param book: The book for analysis. Either a Bible Book (e.g., Genesis) or "Bible"
         """
         self.texts = []  # a list of dictionaries; each item contains one chapter with its attributes
+        self.d_texts = {}
         self.corpus_name = book  # the requested Bible book or full Bible
 
     def get_texts(self):
@@ -65,7 +66,10 @@ class getBibleTexts(object):
             text = re.sub(r'<span[^>]+>|</span>', '', row['text'])
             text = text.replace("'", "").replace('"', '').replace('  ', ' ')
 
-            # self.texts.append({"id": bk + '_' + ch, "author": "", "title": bk + ' ' + ch, "sentiment": 0, "source": "",
+
+            self.d_texts[i] = {"id": i, "author": "", "title": bk + ' ' + ch, "sentiment": 0, "source": "",
+                               "text": text, "topics": {}, "topicsFound": set(), "urlQueryString": bk + '+' + ch}
+
             self.texts.append({"id": i, "author": "", "title": bk + ' ' + ch, "sentiment": 0, "source": "",
                                "text": text, "topics": {}, "topicsFound": set(), "urlQueryString": bk + '+' + ch})
             # "textMark": text,
@@ -97,17 +101,31 @@ class getBibleTexts(object):
         file_name = 'Texts-{}.json'.format(self.corpus_name)
 
         save_texts = []
-        for text in self.texts:
-            sent_class = 'bs-callout-neg' if text['sentiment'] < -0.33 else (
-            'bs-callout-pos' if text['sentiment'] > 0.33 else '')
-            html_card = HTML_CARD.format(id=text['id'], card_sent=sent_class, time='', logo_path='Logos\esv.png',
+        for text_id, text in self.d_texts.items():
+            sent_class = 'bs-callout-neg' if text['sentiment'] < -0.33 else ('bs-callout-pos'
+                                                                             if text['sentiment'] > 0.33 else '')
+            html_card = HTML_CARD.format(id=text_id, card_sent=sent_class, time='', logo_path='Logos\esv.png',
                                          card_title=text['title'], url='https://www.esv.org/' + text['urlQueryString'],
                                          card_text=text['text'])
 
             topics = {k: sorted(list(v), reverse=True) for k, v in text['topics'].items()}  # turn dict sets into dict lists
 
-            save_texts.append({"id": str(text['id']), "title": text['title'], "sentiment": text['sentiment'],
+            save_texts.append({"id": text_id, "title": text['title'], "sentiment": text['sentiment'],
                                "text": text['text'], "topics": topics, "htmlCard": html_card})
+
+
+        # save_texts = []
+        # for text in self.texts:
+        #     sent_class = 'bs-callout-neg' if text['sentiment'] < -0.33 else ('bs-callout-pos'
+        #                                                                      if text['sentiment'] > 0.33 else '')
+        #     html_card = HTML_CARD.format(id=text['id'], card_sent=sent_class, time='', logo_path='Logos\esv.png',
+        #                                  card_title=text['title'], url='https://www.esv.org/' + text['urlQueryString'],
+        #                                  card_text=text['text'])
+        #
+        #     topics = {k: sorted(list(v), reverse=True) for k, v in text['topics'].items()}  # turn dict sets into dict lists
+        #
+        #     save_texts.append({"id": str(text['id']), "title": text['title'], "sentiment": text['sentiment'],
+        #                        "text": text['text'], "topics": topics, "htmlCard": html_card})
 
         with open(config.SAVE_DIR + file_name, 'w') as f:
             json.dump(save_texts, f)
