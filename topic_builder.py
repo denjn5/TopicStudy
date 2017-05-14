@@ -59,6 +59,9 @@ class TopicBuilder(object):
             text['tokensClean'] = [str(word.lemma_).lower() for word in doc
                                    if word.is_alpha and (str(word).lower() not in stop_words)]
 
+            title = self.nlp(text['title'])
+            text['titleTokens'] = [word for word in title]
+
 
     def summarize_texts(self):
         summary = {}
@@ -68,7 +71,7 @@ class TopicBuilder(object):
         return summary
 
 
-    def nouns(self):
+    def nouns(self, include_titles=False):
         """
         Loop through each entry in texts; analyze the texts for nouns. Create a Topic dict, even if we're not doing
         a graph db.  
@@ -90,12 +93,12 @@ class TopicBuilder(object):
                     # Increment or add topic
                     if topic_lemma in self.topics:
                         self.topics[topic_lemma]['count'] += 1
-                        self.topics[topic_lemma]['verbatims'].add(topic_verbatim)
+                        self.topics[topic_lemma]['verbatims'].add(topic_verbatim.lower())
                     else:
                         self.topics[topic_lemma] = {}
                         self.topics[topic_lemma]['name'] = topic_lemma
                         self.topics[topic_lemma]['count'] = 1
-                        self.topics[topic_lemma]['verbatims'] = {topic_verbatim}  # initialize a set
+                        self.topics[topic_lemma]['verbatims'] = {topic_verbatim.lower()}  # initialize a set
                         self.topics[topic_lemma]['children'] = {}
 
 
@@ -111,12 +114,12 @@ class TopicBuilder(object):
                         # Increment or add topic
                         if phrase_lemma in self.topics[topic_lemma]['children']:
                             self.topics[topic_lemma]['children'][phrase_lemma]['count'] += 1
-                            self.topics[topic_lemma]['children'][phrase_lemma]['verbatims'].add(phrase_verbatim)
+                            self.topics[topic_lemma]['children'][phrase_lemma]['verbatims'].add(phrase_verbatim.lower())
                         else:
                             self.topics[topic_lemma]['children'][phrase_lemma] = {}
                             self.topics[topic_lemma]['children'][phrase_lemma]['name'] = phrase_lemma
                             self.topics[topic_lemma]['children'][phrase_lemma]['count'] = 1
-                            self.topics[topic_lemma]['children'][phrase_lemma]['verbatims'] = {phrase_verbatim}
+                            self.topics[topic_lemma]['children'][phrase_lemma]['verbatims'] = {phrase_verbatim.lower()}
 
 
     def add_topic_to_text(self, lemma, verbatim, text_id):

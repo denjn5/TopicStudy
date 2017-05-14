@@ -70,7 +70,7 @@ class getBibleTexts(object):
 
             self.texts[str(i)] = {"author": "", "title": bk + ' ' + ch, "sentiment": 0, "source": "",
                                     "text": text, "topics": {}, "tokens": "", "tokensClean": "",
-                                    "urlQueryString": bk + '+' + ch}
+                                    "titleTokens": "", "urlQueryString": bk + '+' + ch}
 
         return self.texts
 
