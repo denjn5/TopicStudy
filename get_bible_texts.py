@@ -43,8 +43,7 @@ class getBibleTexts(object):
         Get texts from text file and prepare for analysis.
         :param book: The book for analysis. Either a Bible Book (e.g., Genesis) or "Bible"
         """
-        self.texts = []  # a list of dictionaries; each item contains one chapter with its attributes
-        self.d_texts = {}
+        self.texts = {}
         self.corpus_name = book  # the requested Bible book or full Bible
 
     def get_texts(self):
@@ -69,15 +68,11 @@ class getBibleTexts(object):
             text = re.sub(r'<span[^>]+>|</span>', '', row['text'])
             text = text.replace("'", "").replace('"', '').replace('  ', ' ')
 
-            self.d_texts[str(i)] = {"id": str(i), "author": "", "title": bk + ' ' + ch, "sentiment": 0, "source": "",
+            self.texts[str(i)] = {"author": "", "title": bk + ' ' + ch, "sentiment": 0, "source": "",
                                     "text": text, "topics": {}, "tokens": "", "tokensClean": "",
                                     "urlQueryString": bk + '+' + ch}
 
-            self.texts.append({"id": i, "author": "", "title": bk + ' ' + ch, "sentiment": 0, "source": "",
-                               "text": text, "topics": {}, "topicsFound": set(), "urlQueryString": bk + '+' + ch})
-            # "textMark": text,
-
-        return self.d_texts
+        return self.texts
 
     def db_add_posts(self, db_start_fresh=False):
         """
@@ -101,10 +96,10 @@ class getBibleTexts(object):
         NOTE: Assumes that we've already populated **sentiment** and **topics** (outside of this class).
         :return: None
         """
-        file_name = 'Texts-{}.json'.format(self.corpus_name)
+        file_name = 'Texts-{}.txt'.format(self.corpus_name)
 
         save_texts = []
-        for text_id, text in self.d_texts.items():
+        for text_id, text in self.texts.items():
             sent_class = 'bs-callout-neg' if text['sentiment'] < -0.33 else ('bs-callout-pos'
                                                                              if text['sentiment'] > 0.33 else '')
             html_card = HTML_CARD.format(id=text_id, card_sent=sent_class, time='', logo_path='Logos\esv.png',

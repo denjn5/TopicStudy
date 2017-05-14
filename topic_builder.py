@@ -45,17 +45,19 @@ class TopicBuilder(object):
         self.model_output = {'name': corpus_name,
                              'run_date': datetime.now().strftime("%Y-%m-%d %H:%M")}  # For results as json
 
+        # Special Words
+        with open(config.SRC_DIR + 'special.txt', 'r') as file:
+            self.special_words = set(file.read().split(' '))
+
         # Stop Words
-        with open(config.SRC_DIR + 'stopwords.txt', 'r') as file:
-            stopwords = set(file.read().split(' '))
+        with open(config.SRC_DIR + 'stop_words.txt', 'r') as file:
+            stop_words = set(file.read().split(' '))
 
         for text_id, text in self.texts.items():
             doc = self.nlp(text['text'])
             text['tokens'] = [word for word in doc]
             text['tokensClean'] = [str(word.lemma_).lower() for word in doc
-                                   if word.is_alpha and (str(word).lower() not in stopwords)]
-
-
+                                   if word.is_alpha and (str(word).lower() not in stop_words)]
 
 
     def summarize_texts(self):
@@ -81,17 +83,21 @@ class TopicBuilder(object):
 
                     # Find Topics and Phrases
                     topic_verbatim = str(token)  # this is the "verbatim" of the word
-                    topic_lemma = token.lemma_ if token.ent_type_ == '' else token.lemma_.upper()
+                    topic_lemma = token.lemma_ if token.ent_type_ == '' and str(token).lower() not in self.special_words \
+                        else token.lemma_.upper()
                     self.add_topic_to_text(topic_lemma, topic_verbatim, text_id)
 
                     # Increment or add topic
                     if topic_lemma in self.topics:
                         self.topics[topic_lemma]['count'] += 1
+                        self.topics[topic_lemma]['verbatims'].add(topic_verbatim)
                     else:
                         self.topics[topic_lemma] = {}
                         self.topics[topic_lemma]['name'] = topic_lemma
                         self.topics[topic_lemma]['count'] = 1
+                        self.topics[topic_lemma]['verbatims'] = {topic_verbatim}  # initialize a set
                         self.topics[topic_lemma]['children'] = {}
+
 
                     subtree = list(token.subtree)
                     if len(subtree) > 1:
@@ -105,11 +111,12 @@ class TopicBuilder(object):
                         # Increment or add topic
                         if phrase_lemma in self.topics[topic_lemma]['children']:
                             self.topics[topic_lemma]['children'][phrase_lemma]['count'] += 1
+                            self.topics[topic_lemma]['children'][phrase_lemma]['verbatims'].add(phrase_verbatim)
                         else:
                             self.topics[topic_lemma]['children'][phrase_lemma] = {}
                             self.topics[topic_lemma]['children'][phrase_lemma]['name'] = phrase_lemma
                             self.topics[topic_lemma]['children'][phrase_lemma]['count'] = 1
-                            self.topics[topic_lemma]['children'][phrase_lemma]['verbatim'] = phrase_verbatim
+                            self.topics[topic_lemma]['children'][phrase_lemma]['verbatims'] = {phrase_verbatim}
 
 
     def add_topic_to_text(self, lemma, verbatim, text_id):
@@ -139,7 +146,8 @@ class TopicBuilder(object):
         """
 
         # format as a json-style list with name, size, rank (prepping for sunburst viz).
-        topics = [topic for topic_id, topic in self.topics.items() if topic['count'] > 5]
+        topics = [{'name': topic['name'], 'count': topic['count'], 'verbatims': list(topic['verbatims']),
+                   'children': topic['children']} for topic_id, topic in self.topics.items() if topic['count'] > 5]
         topics = sorted(topics, key=lambda topic: topic['count'], reverse=True)
 
         rank = 1
@@ -155,9 +163,10 @@ class TopicBuilder(object):
             topic['rank'] = rank
             # Prune low-use phrases and the 'phrase' attribute
             # topic['children'] = []
-            topic['children'] = [{'name': child['name'], 'count': child['count'], 'verbatim': child['verbatim']}
+            topic['children'] = [{'name': child['name'], 'count': child['count'], 'verbatims': list(child['verbatims'])}
                                  for child_id, child in topic['children'].items() if child['count'] > 5]
-            topic['children'] = sorted(topic['children'], key=lambda verbatim: verbatim['count'], reverse=True)
+
+            topic['children'] = sorted(topic['children'], key=lambda lemma: lemma['count'], reverse=True)
 
             child_count = 0
             for child in topic['children']:
@@ -174,9 +183,9 @@ class TopicBuilder(object):
 
         if data_date:
             date = datetime.strptime(data_date, "%Y-%m-%d").strftime('%m-%d')  # from YYYY-MM-DD to MM-DD
-            file_name = 'Topics-{}-{}.json'.format(self.corpus_name, date)
+            file_name = 'Topics-{}-{}.txt'.format(self.corpus_name, date)
         else:
-            file_name = 'Topics-{}.json'.format(self.corpus_name)
+            file_name = 'Topics-{}.txt'.format(self.corpus_name)
 
         # with open(save_location + 'topics_' + self.corpus_name + '.json', 'w') as f:
         with open(config.SAVE_DIR + file_name, 'w') as f:

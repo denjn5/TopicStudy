@@ -20,7 +20,7 @@ class calculateSentiment(object):
         :return: 
         """
         analyzer = SentimentIntensityAnalyzer()
-        for text in self.texts:
+        for text_id, text in self.texts.items():
             vs = analyzer.polarity_scores(text['text'])
             text['sentiment'] = vs['compound']  # compound
             # print("{:-<65} {}".format(text['text'], str(vs)))
