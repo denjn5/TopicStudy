@@ -69,15 +69,15 @@ class getBibleTexts(object):
             text = re.sub(r'<span[^>]+>|</span>', '', row['text'])
             text = text.replace("'", "").replace('"', '').replace('  ', ' ')
 
-
             self.d_texts[str(i)] = {"id": str(i), "author": "", "title": bk + ' ' + ch, "sentiment": 0, "source": "",
-                               "text": text, "topics": {}, "topicsFound": set(), "urlQueryString": bk + '+' + ch}
+                                    "text": text, "topics": {}, "tokens": "", "tokensClean": "",
+                                    "urlQueryString": bk + '+' + ch}
 
             self.texts.append({"id": i, "author": "", "title": bk + ' ' + ch, "sentiment": 0, "source": "",
                                "text": text, "topics": {}, "topicsFound": set(), "urlQueryString": bk + '+' + ch})
             # "textMark": text,
 
-        return self.texts
+        return self.d_texts
 
     def db_add_posts(self, db_start_fresh=False):
         """
@@ -103,32 +103,20 @@ class getBibleTexts(object):
         """
         file_name = 'Texts-{}.json'.format(self.corpus_name)
 
-        # save_texts = []
-        # for text_id, text in self.d_texts.items():
-        #     sent_class = 'bs-callout-neg' if text['sentiment'] < -0.33 else ('bs-callout-pos'
-        #                                                                      if text['sentiment'] > 0.33 else '')
-        #     html_card = HTML_CARD.format(id=text_id, card_sent=sent_class, time='', logo_path='Logos\esv.png',
-        #                                  card_title=text['title'], url='https://www.esv.org/' + text['urlQueryString'],
-        #                                  card_text=text['text'])
-        #
-        #     topics = {k: sorted(list(v), reverse=True) for k, v in text['topics'].items()}  # turn dict sets into dict lists
-        #
-        #     save_texts.append({"id": text_id, "title": text['title'], "sentiment": text['sentiment'],
-        #                        "text": text['text'], "topics": topics, "htmlCard": html_card})
-
-
         save_texts = []
-        for text in self.texts:
+        for text_id, text in self.d_texts.items():
             sent_class = 'bs-callout-neg' if text['sentiment'] < -0.33 else ('bs-callout-pos'
                                                                              if text['sentiment'] > 0.33 else '')
-            html_card = HTML_CARD.format(id=text['id'], card_sent=sent_class, time='', logo_path='Logos\esv.png',
+            html_card = HTML_CARD.format(id=text_id, card_sent=sent_class, time='', logo_path='Logos\esv.png',
                                          card_title=text['title'], url='https://www.esv.org/' + text['urlQueryString'],
                                          card_text=text['text'])
 
-            topics = {k: sorted(list(v), reverse=True) for k, v in text['topics'].items()}  # turn dict sets into dict lists
+            topics = {k: list(v) for k, v in text['topics'].items()}  # turn dict sets into dict lists
 
-            save_texts.append({"id": str(text['id']), "title": text['title'], "sentiment": text['sentiment'],
+            save_texts.append({"id": text_id, "title": text['title'], "sentiment": text['sentiment'],
                                "text": text['text'], "topics": topics, "htmlCard": html_card})
+
+
 
         with open(config.SAVE_DIR + file_name, 'w') as f:
             json.dump(save_texts, f)
