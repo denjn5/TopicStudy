@@ -25,16 +25,27 @@ class TopicBuilder(object):
     """
     nlp = spacy.load('en')
 
-    def __init__(self, corpus_name, corpus, max_topics=40):
+    def __init__(self, corpus_name, corpus, max_topics=40, data_date=''):
         """
         :param corpus_name: (str) The name of this corpus of texts (e.g., 20170101, Mat1)
         :param corpus: (dict) A dictionary of texts that make up this corpus.
-        :param use_graph_db: (bool) Is neo4j installed?
+        :param max_topics: (int) What's the maximum number of topics to output to sunburst?
+        :param data_date: (str: YYYY-MM-DD) The date of the data we're pulling. Simply passed through to the JSON.
+            Required for the UI.
         """
+
+
+
         # Meta
+        assert corpus_name, "corpus_name required for UI"
+        # TODO: data_date assert: (a) Add beginning of string checker to pattern. (b) allow ''
+        self.check_date_pattern = re.compile("20[0-9]{2}-[0-9]{2}-[0-9]{2}$")
+        # assert re.match(self.check_date_pattern, data_date), "data_date must be in the form 20YY-MM-DD"
+
         self.corpus_name = corpus_name  # (str) The name of the set (or corpus) of texts.
-        # self.current_id = ""  # This is a bit of a hack. When I dive recursively into the phrases, when I get deep
-        # lose the connection to the orig verse. This helps me retain it.
+        self.model_output = {'name': corpus_name,
+                             'data_date': data_date,
+                             'run_date': datetime.now().strftime("%Y-%m-%d %H:%M")}  # For results as json
 
         # Settings
         self.max_topics = max_topics
@@ -42,8 +53,6 @@ class TopicBuilder(object):
         # Primary Data
         self.texts = corpus
         self.topics = {}  # Holds found Topics (basic tracking when graph db isn't available)
-        self.model_output = {'name': corpus_name,
-                             'run_date': datetime.now().strftime("%Y-%m-%d %H:%M")}  # For results as json
 
         # Special Words
         with open(config.SRC_DIR + 'special.txt', 'r') as file:
@@ -85,20 +94,20 @@ class TopicBuilder(object):
                 if token.pos in NOUNS and re.match("^[A-Za-z0-9_-]*$", str(token)):
 
                     # Find Topics and Phrases
-                    topic_verbatim = str(token)  # this is the "verbatim" of the word
-                    topic_lemma = token.lemma_ if token.ent_type_ == '' and str(token).lower() not in self.special_words \
-                        else token.lemma_.upper()
+                    topic_verbatim = str(token).lower() # this is the "verbatim" of the word
+                    topic_lemma = token.lemma_ if token.ent_type_ == '' and \
+                                                  str(token).lower() not in self.special_words else token.lemma_.upper()
                     self.add_topic_to_text(topic_lemma, topic_verbatim, text_id)
 
                     # Increment or add topic
                     if topic_lemma in self.topics:
                         self.topics[topic_lemma]['count'] += 1
-                        self.topics[topic_lemma]['verbatims'].add(topic_verbatim.lower())
+                        self.topics[topic_lemma]['verbatims'].add(topic_verbatim)
                     else:
                         self.topics[topic_lemma] = {}
                         self.topics[topic_lemma]['name'] = topic_lemma
                         self.topics[topic_lemma]['count'] = 1
-                        self.topics[topic_lemma]['verbatims'] = {topic_verbatim.lower()}  # initialize a set
+                        self.topics[topic_lemma]['verbatims'] = {topic_verbatim}  # initialize a set
                         self.topics[topic_lemma]['children'] = {}
 
 
@@ -107,19 +116,20 @@ class TopicBuilder(object):
 
                         phrase_lemma = ''.join([(str(word) if word.lemma_ == '-PRON-' else word.lemma_) for word in subtree])
                         phrase_lemma = ''.join(char for char in phrase_lemma if char not in string.punctuation)
+                        phrase_lemma = phrase_lemma.lower().strip(' ')
                         phrase_verbatim = ' '.join([str(word) for word in subtree])  # .replace(" ,", ",").replace(" ;", ";")
-                        phrase_verbatim = phrase_verbatim.strip(string.punctuation)
+                        phrase_verbatim = phrase_verbatim.strip(string.punctuation).lower().strip(' ')
                         self.add_topic_to_text(phrase_lemma, phrase_verbatim, text_id)
 
                         # Increment or add topic
                         if phrase_lemma in self.topics[topic_lemma]['children']:
                             self.topics[topic_lemma]['children'][phrase_lemma]['count'] += 1
-                            self.topics[topic_lemma]['children'][phrase_lemma]['verbatims'].add(phrase_verbatim.lower())
+                            self.topics[topic_lemma]['children'][phrase_lemma]['verbatims'].add(phrase_verbatim)
                         else:
                             self.topics[topic_lemma]['children'][phrase_lemma] = {}
                             self.topics[topic_lemma]['children'][phrase_lemma]['name'] = phrase_lemma
                             self.topics[topic_lemma]['children'][phrase_lemma]['count'] = 1
-                            self.topics[topic_lemma]['children'][phrase_lemma]['verbatims'] = {phrase_verbatim.lower()}
+                            self.topics[topic_lemma]['children'][phrase_lemma]['verbatims'] = {phrase_verbatim}
 
 
     def add_topic_to_text(self, lemma, verbatim, text_id):

@@ -29,11 +29,12 @@ import config
 
 # GLOBALS
 HTML_CARD = "<div class='card bs-callout {card_sent}' id='card_{id}'>" \
-            "    <div class='cardTime'>{time}</div>" \
-            "    <a href='{url}' target='_blank'><img src='{logo_path}' class='cardImage' /></a>" \
-            "    <div class='cardTitle h4'><a href='javascript:void(0);' onclick='cardToggle({id})'>{card_title}</a></div>" \
-            "    <a href='javascript:void(0);' onclick='cardToggle({id})'><div class='cardToggle'>-</div></a>" \
-            "    <div class='cardText' id='text_{id}'>{card_text}</div>" \
+            "   <div class='cardTime'>{time}</div>" \
+            "   <a href='{url}' target='_blank'><img src='{logo_path}' class='cardImage' /></a>" \
+            "   <div class='cardTitle h4'><a href='javascript:void(0);' onclick='cardToggle({id})'>{card_title}</a></div>" \
+            "   <a href='javascript:void(0);' onclick='cardToggle({id})'>" \
+            "       <i class='fa fa-minus-square-o fa-lg cardToggle'></i></a>" \
+            "   <div class='cardText' id='text_{id}'>{card_text}</div>" \
             "</div>"
 
 
@@ -71,6 +72,7 @@ class getBibleTexts(object):
             self.texts[str(i)] = {"author": "", "title": bk + ' ' + ch, "sentiment": 0, "source": "",
                                     "text": text, "topics": {}, "tokens": "", "tokensClean": "",
                                     "titleTokens": "", "urlQueryString": bk + '+' + ch}
+
 
         return self.texts
 
