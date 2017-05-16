@@ -63,7 +63,7 @@ class FindRelationships(object):
         """
         # TODO: Be smarter: 20/wordcount for starters.  Ensure <1% of total text.
         summary_sent = ""
-        for ss_ratio in (sentence_ratio if sentence_ratio else range(1, 100, 10)):
+        for ss_ratio in (sentence_ratio if sentence_ratio else range(1, 100, 5)):
             summary_sent = gensim.summarization.summarize(raw, ratio=ss_ratio / 400)  # split=True?
             if sentence_ratio or len(summary_sent) > 0:
                 sentence_ratio = ss_ratio

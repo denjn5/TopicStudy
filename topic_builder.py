@@ -34,8 +34,6 @@ class TopicBuilder(object):
             Required for the UI.
         """
 
-
-
         # Meta
         assert corpus_name, "corpus_name required for UI"
         # TODO: data_date assert: (a) Add beginning of string checker to pattern. (b) allow ''
@@ -60,13 +58,13 @@ class TopicBuilder(object):
 
         # Stop Words
         with open(config.SRC_DIR + 'stop_words.txt', 'r') as file:
-            stop_words = set(file.read().split(' '))
+            self.stop_words = set(file.read().split(' '))
 
         for text_id, text in self.texts.items():
             doc = self.nlp(text['text'])
             text['tokens'] = [word for word in doc]
             text['tokensClean'] = [str(word.lemma_).lower() for word in doc
-                                   if word.is_alpha and (str(word).lower() not in stop_words)]
+                                   if word.is_alpha and (str(word).lower() not in self.stop_words)]
 
             title = self.nlp(text['title'])
             text['titleTokens'] = [word for word in title]
@@ -91,7 +89,7 @@ class TopicBuilder(object):
             # self.current_id = text_id  # text_id always remembers where we're at as we loop through our texts
 
             for token in text['tokens']:
-                if token.pos in NOUNS and re.match("^[A-Za-z0-9_-]*$", str(token)):
+                if token.pos in NOUNS and re.match("^[A-Za-z0-9_-]*$", str(token)) and str(token) not in self.stop_words:
 
                     # Find Topics and Phrases
                     topic_verbatim = str(token).lower() # this is the "verbatim" of the word

@@ -1,13 +1,14 @@
 """
 Running this file makes all of the key stuff happen.
 """
-# TODO: Add a C/H getter
 
 # IMPORTS
 import get_bible_texts
 import topic_builder
 import sentiment
 import find_relationships
+import tfidf
+
 
 # GLOBALS: Used these variables to define most common run parameters.
 # Note that most methods have settable parameters that you may want to adjust.
@@ -15,11 +16,11 @@ ORIG_CORPUS = ""  # An optional corpus (used for comparison); formatting may be 
 USE_GRAPH_DB = False
 
 
-
 # GET THE TEXTS
-bt = get_bible_texts.getBibleTexts("Proverbs")  # Get properly formatted corpus (a python list of dictionaries).
+bt = get_bible_texts.getBibleTexts("Hosea")  # Get properly formatted corpus (a python list of dictionaries).
 texts = bt.get_texts()
 corpus_name = bt.corpus_name
+
 
 # ADD SENTIMENT
 sent = sentiment.calculateSentiment(texts)
@@ -29,6 +30,8 @@ sent.add_sentiment()
 tb = topic_builder.TopicBuilder(corpus_name, texts)
 tb.nouns()
 summary = tb.summarize_texts()
+
+# tfidf.tfidf_tutorial(texts)
 
 # Word2Vec; find key sentences, and key words.
 # fr = find_relationships.FindRelationships(texts, corpus_name)
