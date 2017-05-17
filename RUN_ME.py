@@ -17,7 +17,7 @@ USE_GRAPH_DB = False
 
 
 # GET THE TEXTS
-bt = get_bible_texts.getBibleTexts("Hosea")  # Get properly formatted corpus (a python list of dictionaries).
+bt = get_bible_texts.getBibleTexts("Matthew")  # Get properly formatted corpus (a python list of dictionaries).
 texts = bt.get_texts()
 corpus_name = bt.corpus_name
 

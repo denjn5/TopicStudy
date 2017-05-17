@@ -69,14 +69,12 @@ class TopicBuilder(object):
             title = self.nlp(text['title'])
             text['titleTokens'] = [word for word in title]
 
-
     def summarize_texts(self):
         summary = {}
         # summarized_texts['tokens'] = [token for token in text['tokens'] for text in self.texts]
         summary['text'] = ''.join([text['text'] for text_id, text in self.texts.items()])
 
         return summary
-
 
     def nouns(self, include_titles=False):
         """
@@ -89,10 +87,11 @@ class TopicBuilder(object):
             # self.current_id = text_id  # text_id always remembers where we're at as we loop through our texts
 
             for token in text['tokens']:
-                if token.pos in NOUNS and re.match("^[A-Za-z0-9_-]*$", str(token)) and str(token) not in self.stop_words:
+                if token.pos in NOUNS and re.match("^[A-Za-z0-9_-]*$", str(token)) and str(
+                        token) not in self.stop_words:
 
                     # Find Topics and Phrases
-                    topic_verbatim = str(token).lower() # this is the "verbatim" of the word
+                    topic_verbatim = str(token).lower()  # this is the "verbatim" of the word
                     topic_lemma = token.lemma_ if token.ent_type_ == '' and \
                                                   str(token).lower() not in self.special_words else token.lemma_.upper()
                     self.add_topic_to_text(topic_lemma, topic_verbatim, text_id)
@@ -101,21 +100,24 @@ class TopicBuilder(object):
                     if topic_lemma in self.topics:
                         self.topics[topic_lemma]['count'] += 1
                         self.topics[topic_lemma]['verbatims'].add(topic_verbatim)
+                        self.topics[topic_lemma]['text_ids'].add(text_id)
                     else:
                         self.topics[topic_lemma] = {}
                         self.topics[topic_lemma]['name'] = topic_lemma
                         self.topics[topic_lemma]['count'] = 1
                         self.topics[topic_lemma]['verbatims'] = {topic_verbatim}  # initialize a set
+                        self.topics[topic_lemma]['text_ids'] = {text_id}
                         self.topics[topic_lemma]['children'] = {}
-
 
                     subtree = list(token.subtree)
                     if len(subtree) > 1:
 
-                        phrase_lemma = ''.join([(str(word) if word.lemma_ == '-PRON-' else word.lemma_) for word in subtree])
+                        phrase_lemma = ''.join(
+                            [(str(word) if word.lemma_ == '-PRON-' else word.lemma_) for word in subtree])
                         phrase_lemma = ''.join(char for char in phrase_lemma if char not in string.punctuation)
                         phrase_lemma = phrase_lemma.lower().strip(' ')
-                        phrase_verbatim = ' '.join([str(word) for word in subtree])  # .replace(" ,", ",").replace(" ;", ";")
+                        phrase_verbatim = ' '.join(
+                            [str(word) for word in subtree])  # .replace(" ,", ",").replace(" ;", ";")
                         phrase_verbatim = phrase_verbatim.strip(string.punctuation).lower().strip(' ')
                         self.add_topic_to_text(phrase_lemma, phrase_verbatim, text_id)
 
@@ -123,12 +125,13 @@ class TopicBuilder(object):
                         if phrase_lemma in self.topics[topic_lemma]['children']:
                             self.topics[topic_lemma]['children'][phrase_lemma]['count'] += 1
                             self.topics[topic_lemma]['children'][phrase_lemma]['verbatims'].add(phrase_verbatim)
+                            self.topics[topic_lemma]['children'][phrase_lemma]['text_ids'].add(text_id)
                         else:
                             self.topics[topic_lemma]['children'][phrase_lemma] = {}
                             self.topics[topic_lemma]['children'][phrase_lemma]['name'] = phrase_lemma
                             self.topics[topic_lemma]['children'][phrase_lemma]['count'] = 1
                             self.topics[topic_lemma]['children'][phrase_lemma]['verbatims'] = {phrase_verbatim}
-
+                            self.topics[topic_lemma]['children'][phrase_lemma]['text_ids'] = {text_id}
 
     def add_topic_to_text(self, lemma, verbatim, text_id):
         # Found a Topic (we're confident it's a noun); record it in the Texts data store
@@ -146,9 +149,6 @@ class TopicBuilder(object):
         else:
             text['topics'][lemma] = {verbatim}  # initialize set with 1st element
 
-
-
-
     def export_topics(self, data_date=""):
         """
         Save json_results variable to the Output directory.
@@ -157,14 +157,16 @@ class TopicBuilder(object):
         """
 
         # format as a json-style list with name, size, rank (prepping for sunburst viz).
-        topics = [{'name': topic['name'], 'count': topic['count'], 'verbatims': list(topic['verbatims']),
+        topics = [{'name': topic['name'], 'count': topic['count'],
+                   'verbatims': list(topic['verbatims']), 'text_ids': list(topic['text_ids']),
+                   'textCount': len(list(topic['text_ids'])),
                    'children': topic['children']} for topic_id, topic in self.topics.items() if topic['count'] > 5]
-        topics = sorted(topics, key=lambda topic: topic['count'], reverse=True)
+        topics = sorted(topics, key=lambda topic: topic['textCount'], reverse=True)
 
         rank = 1
         prev_count = 0
         for i, topic in enumerate(topics):
-            current_count = topic['count']
+            current_count = topic['textCount']
 
             if current_count < prev_count:  # this topic occurs left often than the last one
                 rank = i + 1
@@ -174,20 +176,21 @@ class TopicBuilder(object):
             topic['rank'] = rank
             # Prune low-use phrases and the 'phrase' attribute
             # topic['children'] = []
-            topic['children'] = [{'name': child['name'], 'count': child['count'], 'verbatims': list(child['verbatims'])}
+            topic['children'] = [{'name': child['name'], 'count': child['count'],
+                                  'verbatims': list(child['verbatims']), 'text_ids': list(child['text_ids']),
+                                  'textCount': len(list(child['text_ids']))}
                                  for child_id, child in topic['children'].items() if child['count'] > 5]
 
-            topic['children'] = sorted(topic['children'], key=lambda lemma: lemma['count'], reverse=True)
+            topic['children'] = sorted(topic['children'], key=lambda lemma: lemma['textCount'], reverse=True)
 
             child_count = 0
             for child in topic['children']:
                 child['rank'] = rank
-                child['size'] = child['count']
+                child['size'] = child['textCount']
                 child_count += child['size']
 
-            topic['size'] = topic['count'] - child_count
+            topic['size'] = topic['textCount'] - child_count if topic['textCount'] >= child_count else 0
             prev_count = current_count
-
 
         # Prune topics over max_topics (default ~40): we stopped calc'ing rank over the max_topics
         self.model_output["children"] = [topic for topic in topics if 'rank' in topic]
