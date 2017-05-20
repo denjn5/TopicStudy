@@ -13,7 +13,7 @@ import tfidf
 # GLOBALS: Used these variables to define most common run parameters.
 # Note that most methods have settable parameters that you may want to adjust.
 ORIG_CORPUS = ""  # An optional corpus (used for comparison); formatting may be critical for get_.
-USE_GRAPH_DB = False
+
 
 
 # GET THE TEXTS
@@ -23,13 +23,13 @@ corpus_name = bt.corpus_name
 
 
 # ADD SENTIMENT
-sent = sentiment.calculateSentiment(texts)
-sent.add_sentiment()
+# sent = sentiment.calculateSentiment(texts)
+# sent.add_sentiment()
 
 # FIND TOPICS
 tb = topic_builder.TopicBuilder(corpus_name, texts)
-tb.nouns()
-summary = tb.summarize_texts()
+tb.topic_finder()
+# summary = tb.summarize_texts()
 
 # tfidf.tfidf_tutorial(texts)
 
