@@ -27,7 +27,7 @@ corpus_name = bt.corpus_name
 # sent.add_sentiment()
 
 # FIND TOPICS
-tb = topic_builder.TopicBuilder(corpus_name, texts)
+tb = topic_builder.TopicBuilder(corpus_name, texts, max_topics=65)
 tb.topic_finder()
 # summary = tb.summarize_texts()
 

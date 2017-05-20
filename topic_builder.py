@@ -75,18 +75,18 @@ class TopicBuilder(object):
         # Loop through texts looking for important known entities and entity n-grams
         for text_id, text in self.texts.items():
             doc = self.nlp(text['text'])
-            text['tokensClean'] = [str(word.lemma_).lower() for word in doc
-                                   if word.is_alpha and (str(word).lower() not in self.stop_words)]
 
-            title = self.nlp(text['title'])
-            text['titleTokens'] = [word for word in title]
-
-            # Loop through doc.  If I find a proper noun, then check if the next token is a proper noun of the same
-            # entity type. If yes, merge and repeat.
-            doc_len = len(doc)
+            # Loop through tokens to be sure that known entities are marked that way
+            stash = doc.ents
             for token in doc:
-                if str(token).lower() in self.known_entities and token.pos != ss.PROPN:
+                if str(token).lower() in self.known_entities and token.ent_type not in self.entities:
                     doc.ents = [(str(token).title(), doc.vocab.strings['PERSON'], token.i, token.i + 1)]
+                    doc.ents = doc.ents + stash
+
+            # Look for proper noun n-grams: (a) find a known entity, (b) is the next word also a known entity?,
+            #   (c) merge, (d) repeat
+            doc_len = len(doc)  # Helps us know when to exit the 'for loop' (since we change the # of items via merge)
+            for token in doc:
 
                 if token.i + 1 < doc_len and token.ent_type in self.entities:
                     while token.i + 1 < doc_len and doc[token.i + 1].ent_type == token.ent_type:
@@ -98,6 +98,11 @@ class TopicBuilder(object):
                     break
 
             text['tokens'] = [word for word in doc]
+            text['tokensClean'] = [str(word.lemma_).lower() for word in doc
+                                   if word.is_alpha and (str(word).lower() not in self.stop_words)]
+
+            title = self.nlp(text['title'])
+            text['titleTokens'] = [word for word in title]
 
     def summarize_texts(self):
         """
@@ -122,7 +127,7 @@ class TopicBuilder(object):
                 # "^[A-Za-z0-9_ -]{2,}$" --> whole word is (a) made up of letters, numbers, spaces, underscores, and
                 #   hyphens, and (b) is 2 letters or longer.
                 if (token.pos in self.nouns or token.ent_type in self.entities) and \
-                        re.match("^[A-Za-z0-9_-]{2,}$", str(token)) and str(token) not in self.stop_words:
+                        re.match("^[A-Za-z0-9 _-]{2,}$", str(token)) and str(token) not in self.stop_words:
 
                     # Find Topics and Phrases
                     topic_verbatim = str(token).lower()  # this is the "verbatim" of the word
