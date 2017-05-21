@@ -235,7 +235,7 @@ class TopicBuilder(object):
         self.model_output["children"] = [topic for topic in topics if 'rank' in topic]
 
         if data_date:
-            date = datetime.strptime(data_date, "%Y-%m-%d").strftime('%m-%d')  # from YYYY-MM-DD to MM-DD
+            date = datetime.strptime(data_date, "%Y-%m-%d").strftime('%d')  # from YYYY-MM-DD to DD
             file_name = 'Topics-{}-{}.txt'.format(self.corpus_name, date)
         else:
             file_name = 'Topics-{}.txt'.format(self.corpus_name)
