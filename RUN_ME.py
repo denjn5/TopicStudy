@@ -17,14 +17,14 @@ ORIG_CORPUS = ""  # An optional corpus (used for comparison); formatting may be 
 
 
 # GET THE TEXTS
-bt = get_bible_texts.getBibleTexts("Matthew")  # Get properly formatted corpus (a python list of dictionaries).
+bt = get_bible_texts.getBibleTexts("Mark")  # Get properly formatted corpus (a python list of dictionaries).
 texts = bt.get_texts()
 corpus_name = bt.corpus_name
 
 
 # ADD SENTIMENT
-# sent = sentiment.calculateSentiment(texts)
-# sent.add_sentiment()
+sent = sentiment.calculateSentiment(texts)
+sent.add_sentiment()
 
 # FIND TOPICS
 tb = topic_builder.TopicBuilder(corpus_name, texts, max_topics=65)

@@ -7,15 +7,6 @@ Build requirements:
 * export_texts(texts, save_directory) takes the list of dicts created above and the directory location and dumps / saves
     it as a json file.
 * db_add_posts() is an optional function that takes the returned object from main() and saves it to a dictionary.
-
-Text parsing work:
-1) Remove all quotes (', ")
-2) htmlCard --> 
-    <a href='https://reddit.com/' target='_blank'>
-        <img src='//logo.clearbit.com/reddit.com?size=40' class='img' /></a>
-    <b>Title</b>. The first 30 words of the article<a href='#' class='textToggle' id='1'>...</a>
-    <span style='display: none' id='1t'>The 'rest' of the article here.</span>
-
 """
 
 # FEATURE: Can I run a compare of all chapters in the Bible to see which ones have the greatest overlap?
@@ -27,16 +18,6 @@ import json
 import graph_database
 import config
 
-# GLOBALS
-HTML_CARD = "<div class='card bs-callout {card_sent}' id='card_{id}'>" \
-            "   <div class='cardTime'>{time}</div>" \
-            "   <a href='{url}' target='_blank'><img src='{logo_path}' class='cardImage' /></a>" \
-            "   <div class='cardTitle h4'><a href='javascript:void(0);' onclick='cardToggle({id})'>{card_title}</a></div>" \
-            "   <a href='javascript:void(0);' onclick='cardToggle({id})'>" \
-            "       <i class='fa fa-minus-square-o fa-lg cardToggle'></i></a>" \
-            "   <div class='cardText' id='text_{id}'>{card_text}</div>" \
-            "</div>"
-
 
 class getBibleTexts(object):
     def __init__(self, book):
@@ -46,6 +27,16 @@ class getBibleTexts(object):
         """
         self.texts = {}
         self.corpus_name = book  # the requested Bible book or full Bible
+
+        self.html_card = "<div class='card bs-callout {card_sent}' id='card_{id}'>" \
+                    "<div class='cardTime'>{time}</div>" \
+                    "<a href='{url}' target='_blank'><img src='{logo_path}' class='cardImage' /></a>" \
+                    "<div class='cardTitle h4'>" \
+                    "<a href='javascript:void(0);' onclick='cardToggle({id})'>{card_title}</a></div>" \
+                    "<a href='javascript:void(0);' onclick='cardToggle({id})'>" \
+                    "<i class='fa fa-minus-square-o fa-lg cardToggle'></i></a>" \
+                    "<div class='cardText' id='text_{id}'>{card_text}</div>" \
+                    "</div>"
 
     def get_texts(self):
         """
@@ -104,7 +95,7 @@ class getBibleTexts(object):
         for text_id, text in self.texts.items():
             sent_class = 'bs-callout-neg' if text['sentiment'] < -0.33 else ('bs-callout-pos'
                                                                              if text['sentiment'] > 0.33 else '')
-            html_card = HTML_CARD.format(id=text_id, card_sent=sent_class, time='', logo_path='Logos\esv.png',
+            html_card = self.html_card.format(id=text_id, card_sent=sent_class, time='', logo_path='Logos\esv.png',
                                          card_title=text['title'], url='https://www.esv.org/' + text['urlQueryString'],
                                          card_text=text['text'])
 
