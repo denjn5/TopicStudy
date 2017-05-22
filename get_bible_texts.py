@@ -19,7 +19,11 @@ import graph_database
 import config
 
 
-class getBibleTexts(object):
+class GetBibleTexts(object):
+    """
+    Get Bible texts for topic modeling.
+    """
+
     def __init__(self, book):
         """
         Get texts from text file and prepare for analysis.
@@ -29,14 +33,14 @@ class getBibleTexts(object):
         self.corpus_name = book  # the requested Bible book or full Bible
 
         self.html_card = "<div class='card bs-callout {card_sent}' id='card_{id}'>" \
-                    "<div class='cardTime'>{time}</div>" \
-                    "<a href='{url}' target='_blank'><img src='{logo_path}' class='cardImage' /></a>" \
-                    "<div class='cardTitle h4'>" \
-                    "<a href='javascript:void(0);' onclick='cardToggle({id})'>{card_title}</a></div>" \
-                    "<a href='javascript:void(0);' onclick='cardToggle({id})'>" \
-                    "<i class='fa fa-minus-square-o fa-lg cardToggle'></i></a>" \
-                    "<div class='cardText' id='text_{id}'>{card_text}</div>" \
-                    "</div>"
+                         "<div class='cardTime'>{time}</div>" \
+                         "<a href='{url}' target='_blank'><img src='{logo_path}' class='cardImage' /></a>" \
+                         "<div class='cardTitle h4'>" \
+                         "<a href='javascript:void(0);' onclick='cardToggle({id})'>{card_title}</a></div>" \
+                         "<a href='javascript:void(0);' onclick='cardToggle({id})'>" \
+                         "<i class='fa fa-minus-square-o fa-lg cardToggle'></i></a>" \
+                         "<div class='cardText' id='text_{id}'>{card_text}</div>" \
+                         "</div>"
 
     def get_texts(self):
         """
@@ -61,27 +65,11 @@ class getBibleTexts(object):
             text = text.replace("'", "").replace('"', '').replace('  ', ' ')
 
             self.texts[str(i)] = {"author": "", "title": bk + ' ' + ch, "sentiment": 0, "source": "",
-                                    "text": text, "topics": {}, "tokens": "", "tokensClean": "",
-                                    "titleTokens": "", "urlQueryString": bk + '+' + ch}
-
+                                  "text": text, "topics": {}, "tokens": "", "tokensClean": "",
+                                  "titleTokens": "", "urlQueryString": bk + '+' + ch}
 
         return self.texts
 
-    def db_add_posts(self, db_start_fresh=False):
-        """
-        Save each verse to the graph database.
-        :param db_start_fresh: Do we delete all on graph db before starting?
-        :return: 
-        """
-        # TODO: Add "title" to Text node.
-        gt = graph_database.GraphManager()
-
-        if db_start_fresh:
-            gt.delete_all()
-
-        for text in self.texts:
-            gt.text(text['id'], text['text'])
-            # gt.close()
 
     def export_texts(self):
         """
@@ -96,15 +84,14 @@ class getBibleTexts(object):
             sent_class = 'bs-callout-neg' if text['sentiment'] < -0.33 else ('bs-callout-pos'
                                                                              if text['sentiment'] > 0.33 else '')
             html_card = self.html_card.format(id=text_id, card_sent=sent_class, time='', logo_path='Logos\esv.png',
-                                         card_title=text['title'], url='https://www.esv.org/' + text['urlQueryString'],
-                                         card_text=text['text'])
+                                              card_title=text['title'],
+                                              url='https://www.esv.org/' + text['urlQueryString'],
+                                              card_text=text['text'])
 
             topics = {k: list(v) for k, v in text['topics'].items()}  # turn dict sets into dict lists
 
             save_texts.append({"id": text_id, "title": text['title'], "sentiment": text['sentiment'],
                                "text": text['text'], "topics": topics, "htmlCard": html_card})
-
-
 
         with open(config.SAVE_DIR + file_name, 'w') as f:
             json.dump(save_texts, f)

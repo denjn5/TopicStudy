@@ -24,7 +24,7 @@ class TopicBuilder(object):
 
     def __init__(self, corpus_name, corpus, max_topics=40, data_date=''):
         """
-        :param corpus_name: (str) A short (between 4 and 20 characters) human-readable name for this corpus of texts.
+        :param corpus_name: (str) A short (between 3 and 20 characters) human-readable name for this corpus of texts.
             It will show up in the UI and help us pass the file back-and-forth.
         :param corpus: (dict) A dictionary of texts that make up this corpus.
         :param max_topics: (int) What's the maximum number of topics to output to sunburst?
@@ -41,8 +41,8 @@ class TopicBuilder(object):
                          ss.LANGUAGE}
 
         # Check the user arguments
-        assert 3 < len(corpus_name) < 21 and re.match(self.phrase_pattern, corpus_name), \
-            'A corpus_name (between 4 and 20 characters; made of letters, numbers, underscores, or dashes) is required.'
+        assert 2 < len(corpus_name) < 21 and re.match(self.phrase_pattern, corpus_name), \
+            'A corpus_name (between 3 and 20 characters; made of letters, numbers, underscores, or dashes) is required.'
         assert data_date == '' or re.match(self.date_pattern, data_date), \
             'If you include a data_date, it must match the form 20YY-MM-DD.'
         assert type(corpus) is dict, 'The corpus must be a dictionary.'
@@ -147,7 +147,7 @@ class TopicBuilder(object):
                 #   hyphens, and (b) is 2 letters or longer.
 
                 # We should only go beyond this point if this token is a noun or known entity, contains only vanilla
-                # characters (letters, numbers), and is *not* in our stop_words list.
+                # characters (letters, numbers, etc.), and is *not* in our stop_words list.
                 if (token.pos not in self.nouns and token.ent_type not in self.entities) or \
                         not self.phrase_pattern.match(str(token)) or str(token) in self.stop_words:
                     continue
@@ -172,27 +172,29 @@ class TopicBuilder(object):
                     self.topics[topic_lemma]['children'] = {}
 
                 subtree = list(token.subtree)
-                if len(subtree) > 1:
+                phrase_lemma = ''.join([(str(word) if word.lemma_ == '-PRON-' else word.lemma_) for word in subtree])
+                phrase_lemma = ''.join(char for char in phrase_lemma if char not in string.punctuation)
+                phrase_lemma = phrase_lemma.lower().strip(' ')
 
-                    phrase_lemma = ''.join(
-                        [(str(word) if word.lemma_ == '-PRON-' else word.lemma_) for word in subtree])
-                    phrase_lemma = ''.join(char for char in phrase_lemma if char not in string.punctuation)
-                    phrase_lemma = phrase_lemma.lower().strip(' ')
-                    phrase_verbatim = ' '.join(
-                        [str(word) for word in subtree])  # .replace(" ,", ",").replace(" ;", ";")
-                    phrase_verbatim = phrase_verbatim.strip(string.punctuation).lower().strip(' ')
+                # Is the phrase different than the topic? Skip to the next loop if they're the same
+                # TODO: This seems to let same stuff through...
+                if topic_lemma.lower() == phrase_lemma.lower():
+                    continue
 
-                    # Increment or add topic
-                    if phrase_lemma in self.topics[topic_lemma]['children']:
-                        self.topics[topic_lemma]['children'][phrase_lemma]['count'] += 1
-                        self.topics[topic_lemma]['children'][phrase_lemma]['verbatims'].add(phrase_verbatim)
-                        self.topics[topic_lemma]['children'][phrase_lemma]['textIDs'].add(text_id)
-                    else:
-                        self.topics[topic_lemma]['children'][phrase_lemma] = {}
-                        self.topics[topic_lemma]['children'][phrase_lemma]['name'] = phrase_lemma
-                        self.topics[topic_lemma]['children'][phrase_lemma]['count'] = 1
-                        self.topics[topic_lemma]['children'][phrase_lemma]['verbatims'] = {phrase_verbatim}
-                        self.topics[topic_lemma]['children'][phrase_lemma]['textIDs'] = {text_id}
+                phrase_verbatim = ' '.join([str(word) for word in subtree]).replace(" ,", ",").replace(" ;", ";")
+                phrase_verbatim = phrase_verbatim.strip(string.punctuation).lower().strip(' ')
+
+                # Increment or add topic
+                if phrase_lemma in self.topics[topic_lemma]['children']:
+                    self.topics[topic_lemma]['children'][phrase_lemma]['count'] += 1
+                    self.topics[topic_lemma]['children'][phrase_lemma]['verbatims'].add(phrase_verbatim)
+                    self.topics[topic_lemma]['children'][phrase_lemma]['textIDs'].add(text_id)
+                else:
+                    self.topics[topic_lemma]['children'][phrase_lemma] = {}
+                    self.topics[topic_lemma]['children'][phrase_lemma]['name'] = phrase_lemma
+                    self.topics[topic_lemma]['children'][phrase_lemma]['count'] = 1
+                    self.topics[topic_lemma]['children'][phrase_lemma]['verbatims'] = {phrase_verbatim}
+                    self.topics[topic_lemma]['children'][phrase_lemma]['textIDs'] = {text_id}
 
 
     def export_topics(self):
@@ -229,13 +231,16 @@ class TopicBuilder(object):
 
             topic['children'] = sorted(topic['children'], key=lambda lemma: lemma['textCount'], reverse=True)
 
-            child_count = 0
+            # If the subtopic count is greater than the topic count, than calc a multiplier to size each subtopic
+            child_count = sum([child['textCount'] for child in topic['children']])
+            child_count_multiplier = 1 if child_count < topic['textCount'] else topic['textCount'] / child_count
+
             for child in topic['children']:
                 child['rank'] = rank
-                child['size'] = child['textCount']
-                child_count += child['size']
+                child['size'] = child['textCount'] * child_count_multiplier
 
-            topic['size'] = topic['textCount'] - child_count if topic['textCount'] >= child_count else 0
+            topic['size'] = topic['textCount'] - (child_count * child_count_multiplier)
+            # topic['size'] = topic['textCount'] - child_count if topic['textCount'] >= child_count else 0
             prev_count = current_count
 
         # Prune topics over max_topics (default ~40): we stopped calc'ing rank over the max_topics
