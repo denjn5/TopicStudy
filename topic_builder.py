@@ -36,6 +36,7 @@ class TopicBuilder(object):
         # Match letters, numbers, spaces, underscores, and dashes. Ignore case. Must be 2 or more characters in length.
         self.phrase_pattern = re.compile('^[a-z0-9 _-]{2,}$', re.IGNORECASE)
         self.date_pattern = re.compile('20[0-9]{2}-[0-1][0-9]-[0-3][0-9]$')
+        self.empty_words = {'a', 'an', 'that', 'the', 'this'}
         self.nouns = {ss.NOUN, ss.PROPN}
         self.entities = {ss.PERSON, ss.NORP, ss.FACILITY, ss.ORG, ss.GPE, ss.LOC, ss.PRODUCT, ss.EVENT, ss.WORK_OF_ART,
                          ss.LANGUAGE}
@@ -56,19 +57,10 @@ class TopicBuilder(object):
                              'data_date': data_date,
                              'run_date': datetime.now().strftime("%Y-%m-%d %H:%M")}  # For results as json
 
-
         # Primary Data
         self.texts = corpus  # The passed in dict of all texts that we'll analyze
         self.summary = {}  # A dictionary that we'll create here that has summary stats
         self.topics = {}  # A dict that we'll populate with found Topics
-
-        self._tokenize()
-
-    def _tokenize(self):
-        """
-        Create spaCy token lists from the original text strings from self.texts['text']. 
-        :return: 
-        """
 
         # Get known entities
         try:
@@ -88,27 +80,38 @@ class TopicBuilder(object):
                   'ignore in most text processing.')
             self.stop_words = set()
 
+        self._tokenize()
+
+    def _tokenize(self):
+        """
+        Create spaCy token lists from the original text strings from self.texts['text']. 
+        :return: 
+        """
+
         # Loop through texts looking for important known entities and entity n-grams
         for text_id, text in self.texts.items():
-            doc = self.nlp(text['text'])
+            doc = self.nlp(text['text'].strip())
 
             # Loop through tokens and find known entities aren't already marked
             for token in doc:
                 # Is this word in our known_entities, but is not recognized by the spaCy parser?
-                if str(token).lower() in self.known_entities and token.ent_type not in self.entities:
+                if token.text.lower() in self.known_entities and token.ent_type not in self.entities:
                     # We need to set the new entity to doc.ents directly (I believe the getter for doc.ents does
                     #     some important massaging.  However, counter to the online docs, setting doc.ents wipes out
                     #     all of the previously recognized ents, so we stash the value, then we combine and reset.
                     stash = doc.ents
-                    doc.ents = [(str(token).title(), doc.vocab.strings['PERSON'], token.i, token.i + 1)]
+                    doc.ents = [(token.text.title(), doc.vocab.strings['PERSON'], token.i, token.i + 1)]
                     doc.ents = doc.ents + stash
 
             # Find proper noun n-grams: (a) find a known entity, (b) is the next word also a known entity?,
             #   (c) merge, (d) repeat
             doc_len = len(doc)  # Helps us know when to exit the 'for loop' (since we change the # of items via merge)
             for token in doc:
-                if token.i + 1 < doc_len and token.ent_type in self.entities:
-                    while token.i + 1 < doc_len and doc[token.i + 1].ent_type == token.ent_type:
+                if token.i + 1 < doc_len and token.ent_type in self.entities and \
+                                token.text.lower() not in self.stop_words and token.text not in ' ':
+                    next_token = doc[token.i + 1]
+                    while token.i + 1 < doc_len and next_token.ent_type == token.ent_type and \
+                                    next_token.text.lower() not in self.stop_words and next_token.text not in ' ':
                         n_gram = doc[token.i:token.i + 2]
                         n_gram.merge()
                         doc_len -= 1  # the merge changes the list length, so we just shrunk the list!
@@ -116,12 +119,13 @@ class TopicBuilder(object):
                 if token.i + 1 >= doc_len:
                     break
 
-            text['tokens'] = [word for word in doc]
-            text['tokensClean'] = [str(word.lemma_).lower() for word in doc
-                                   if word.is_alpha and (str(word).lower() not in self.stop_words)]
+            text['doc'] = doc
+            # text['tokens'] = [word for word in doc]
+            # text['tokensClean'] = [str(word.lemma_).lower() for word in doc
+            #                        if word.is_alpha and (str(word).lower() not in self.stop_words)]
 
-            title = self.nlp(text['title'])
-            text['titleTokens'] = [word for word in title]
+            title_doc = self.nlp(text['title'])
+            text['title_doc'] = title_doc
 
     def summarize_texts(self):
         """
@@ -141,19 +145,19 @@ class TopicBuilder(object):
 
         for text_id, text in self.texts.items():
             # self.current_id = text_id  # text_id always remembers where we're at as we loop through our texts
+            doc = text['doc']
+            noun_chunk_boundaries = [(nc.start, nc.end) for nc in doc.noun_chunks]
 
-            for token in text['tokens']:
-                # "^[A-Za-z0-9_ -]{2,}$" --> whole word is (a) made up of letters, numbers, spaces, underscores, and
-                #   hyphens, and (b) is 2 letters or longer.
+            for token in doc:
 
                 # We should only go beyond this point if this token is a noun or known entity, contains only vanilla
                 # characters (letters, numbers, etc.), and is *not* in our stop_words list.
-                if (token.pos not in self.nouns and token.ent_type not in self.entities) or \
-                        not self.phrase_pattern.match(str(token)) or str(token) in self.stop_words:
+                topic_verbatim = token.text.strip().lower()  # this is the "verbatim" of the word
+                if not ((token.pos in self.nouns or token.ent_type in self.entities) and
+                            self.phrase_pattern.match(topic_verbatim) and topic_verbatim not in self.stop_words):
                     continue
 
                 # Find Topics and Phrases
-                topic_verbatim = str(token).lower()  # this is the "verbatim" of the word
                 topic_lemma = token.lemma_
                 if token.pos == ss.PROPN or token.ent_type in self.entities:
                     topic_lemma = topic_lemma.upper()
@@ -172,19 +176,44 @@ class TopicBuilder(object):
                     self.topics[topic_lemma]['children'] = {}
 
                 subtree = list(token.subtree)
-                phrase_lemma = ''.join([(str(word) if word.lemma_ == '-PRON-' else word.lemma_) for word in subtree])
-                phrase_lemma = ''.join(char for char in phrase_lemma if char not in string.punctuation)
-                phrase_lemma = phrase_lemma.lower().strip(' ')
+                if token.dep in {ss.nsubj, ss.nsubjpass}:
+                    subtree.append(token.head)
+
+                phrase_set = {(str(word) if word.lemma_ == '-PRON-' else word.lemma_) for
+                              word in subtree if word.lemma_ not in self.empty_words and
+                              word.text not in string.punctuation}
+
+                # phrase_lemma = ''.join([(str(word) if word.lemma_ == '-PRON-' else word.lemma_) for
+                #                         word in subtree if word.lemma_ not in self.stop_words])
+                # phrase_lemma = ''.join(char for char in phrase_lemma if char not in string.punctuation).replace(' ', '')
+
+                # TODO: Get better at finding good phrases
+                # ####  bake off  ####
+                # find noun_chunk
+
+                # st = ' '.join([word.text for word in subtree])
+                # # nc = ' '.join([str(nc) for nc in doc.noun_chunks if nc.start <= token.i < nc.end])
+                # v = str(token.head) if token.dep_ in 'nsubj' else ''
+                # print(topic_lemma + ': ' + st + ' | ' + v)
 
                 # Is the phrase different than the topic? Skip to the next loop if they're the same
                 # TODO: This seems to let same stuff through...
-                if topic_lemma.lower() == phrase_lemma.lower():
+                # if topic_lemma.lower() == phrase_lemma.lower():
+                #     continue
+
+                if not phrase_set - {topic_lemma.lower()}:  # false = empty set (complete match), so we add a not
                     continue
 
+                if subtree[0].text.lower() in self.empty_words:
+                    subtree.pop(0)
                 phrase_verbatim = ' '.join([str(word) for word in subtree]).replace(" ,", ",").replace(" ;", ";")
                 phrase_verbatim = phrase_verbatim.strip(string.punctuation).lower().strip(' ')
 
+                phrase_lemma = '_'.join(sorted(phrase_set))
+                # print(phrase_lemma + ': ' + phrase_verbatim)
+
                 # Increment or add topic
+
                 if phrase_lemma in self.topics[topic_lemma]['children']:
                     self.topics[topic_lemma]['children'][phrase_lemma]['count'] += 1
                     self.topics[topic_lemma]['children'][phrase_lemma]['verbatims'].add(phrase_verbatim)
@@ -195,7 +224,6 @@ class TopicBuilder(object):
                     self.topics[topic_lemma]['children'][phrase_lemma]['count'] = 1
                     self.topics[topic_lemma]['children'][phrase_lemma]['verbatims'] = {phrase_verbatim}
                     self.topics[topic_lemma]['children'][phrase_lemma]['textIDs'] = {text_id}
-
 
     def export_topics(self):
         """
