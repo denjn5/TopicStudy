@@ -1,21 +1,17 @@
-r=1
-ct = 0
-for a in x:
-    r += 1 if (a['size'] < ct) else 0
-    a['rank'] = r
-    ct = a['size']
-    print(a)
 
 
-# If this word hasn't been found before (in this text), then look for it and highlight
-if token_str not in text['topicsMark']:
-    # text['textMark'] = text['textMark'].replace(token_str,  "<mark class='{0}'>{0}</mark>".format(token_str))
-    text['textMark'] = re.sub(r"(?<=[^>])(\b' + token_str + r'\b)",
-                              "<mark>\g<0></mark>", text['textMark'])
-    text['topicsMark'].add(token_str)
+####  phrase bake-off  ####
+1) get the phrase: which is better, noun_chunk or subtree?
+
+2) what's right after this? (both verbatim and pos_ pattern)
 
 
-tf-idf
+
+
+
+
+
+####  tf-idf  ####
 computer 1/8 & 1/10
 
 9 docs
@@ -26,3 +22,140 @@ log(9/2) = 0.65321251377
 0.19
 
 (1/10) / 0.653
+
+
+       bigrams = {}
+
+        for _, text in self.texts.items():
+            # bigrams += [bi for bi in zip(text['doc'], text['doc'][1:]) if
+            #             not {bi[0].text, bi[1].text}.intersection(punct) and
+            #             not {bi[0].lemma_, bi[1].lemma_}.intersection(self.stop_words)]
+
+            for bi in zip(text['doc'], text['doc'][1:]):
+                # bi_lemma = bi[0].lemma_ + ' ' + bi[1].lemma_
+                bi_lemma = bi[0].text.lower() if bi[0].lemma_ == '-PRON-' else bi[0].lemma_ + ' ' + \
+                        bi[1].text.lower() if bi[1].lemma_ == '-PRON-' else bi[1].lemma_
+
+                if ({bi[0].text, bi[1].text}.intersection(punct) or
+                    {bi[0].lemma_, bi[1].lemma_}.intersection(self.stop_words)):
+                    continue
+                elif bi_lemma in bigrams:
+                    bigrams[bi_lemma] += 1
+                else:
+                    bigrams[bi_lemma] = 1
+
+
+        trigrams = {}
+        for _, text in self.texts.items():
+            # trigrams += [tri for tri in zip(text['doc'], text['doc'][1:], text['doc'][2:]) if
+            #             not {tri[0].text, tri[1].text, tri[2].text}.intersection(punct) and
+            #             not {tri[0].lemma_, tri[2].lemma_}.intersection(self.stop_words)]
+
+            for tri in zip(text['doc'], text['doc'][1:], text['doc'][2:]):
+                # tri_lemma = tri[0].lemma_ + ' ' + tri[1].lemma_ + ' ' + tri[2].lemma_
+                tri_lemma = bi[0].text.lower() if bi[0].lemma_ == '-PRON-' else bi[0].lemma_ + ' ' + \
+                        bi[1].text.lower() if bi[1].lemma_ == '-PRON-' else bi[1].lemma_ + ' ' + \
+                        bi[2].text.lower() if bi[2].lemma_ == '-PRON-' else bi[2].lemma_
+
+                if ({tri[0].text, tri[1].text, tri[2].text}.intersection(punct) or
+                    {tri[0].lemma_, tri[2].lemma_}.intersection(self.stop_words)):
+                    continue
+                elif tri_lemma in trigrams:
+                    trigrams[tri_lemma] += 1
+                else:
+                    trigrams[tri_lemma] = 1
+
+
+        tetragrams = []
+        for _, text in self.texts.items():
+            tetragrams += [tet for tet in zip(text['doc'], text['doc'][1:], text['doc'][2:], text['doc'][3:]) if
+                        not {tet[0].text, tet[1].text, tet[2].text, tet[3].text}.intersection(punct) and
+                        not {tet[0].lemma_, tet[3].lemma_}.intersection(self.stop_words)]
+
+        pentagrams = []
+        for _, text in self.texts.items():
+            pentagrams += [pen for pen in zip(text['doc'], text['doc'][1:], text['doc'][2:], text['doc'][3:], text['doc'][4:]) if
+                        not {pen[0].text, pen[1].text, pen[2].text, pen[3].text, pen[4].text}.intersection(punct) and
+                        not {pen[0].lemma_, pen[4].lemma_}.intersection(self.stop_words)]
+
+
+
+                                  # for tri in zip(text['doc'], text['doc'][1:], text['doc'][2:]):
+            #     # tri_lemma = tri[0].lemma_ + ' ' + tri[1].lemma_ + ' ' + tri[2].lemma_
+            #     tri_lemma = (tri[0].text.lower() if tri[0].lemma_ == '-PRON-' else tri[0].lemma_) + '_' + \
+            #                 (tri[1].text.lower() if tri[1].lemma_ == '-PRON-' else tri[1].lemma_) + '_' + \
+            #                 (tri[2].text.lower() if tri[2].lemma_ == '-PRON-' else tri[2].lemma_)
+            #
+            #     if ({tri[0].text, tri[1].text, tri[2].text}.intersection(punct) or
+            #             {tri[0].lemma_, tri[2].lemma_}.intersection(self.stop_words)):
+            #         continue
+            #     elif tri_lemma in trigrams:
+            #         trigrams[tri_lemma] += 1
+            #     else:
+            #         trigrams[tri_lemma] = 1
+            #
+            # for tet in zip(text['doc'], text['doc'][1:], text['doc'][2:], text['doc'][3:]):
+            #     # tri_lemma = tri[0].lemma_ + ' ' + tri[1].lemma_ + ' ' + tri[2].lemma_
+            #     tetra_lemma = (tet[0].text.lower() if tet[0].lemma_ == '-PRON-' else tet[0].lemma_) + '_' + \
+            #                   (tet[1].text.lower() if tet[1].lemma_ == '-PRON-' else tet[1].lemma_) + '_' + \
+            #                   (tet[2].text.lower() if tet[2].lemma_ == '-PRON-' else tet[2].lemma_) + '_' + \
+            #                   (tet[3].text.lower() if tet[3].lemma_ == '-PRON-' else tet[3].lemma_)
+            #
+            #     if ({tet[0].text, tet[1].text, tet[2].text, tet[3].text}.intersection(punct) or
+            #             {tet[0].lemma_, tet[3].lemma_}.intersection(self.stop_words)):
+            #         continue
+            #     elif tetra_lemma in tetragrams:
+            #         tetragrams[tetra_lemma] += 1
+            #     else:
+            #         tetragrams[tetra_lemma] = 1
+            #
+            # for pen in zip(text['doc'], text['doc'][1:], text['doc'][2:], text['doc'][3:], text['doc'][4:]):
+            #     penta_lemma = (pen[0].text.lower() if pen[0].lemma_ == '-PRON-' else pen[0].lemma_) + '_' + \
+            #                   (pen[1].text.lower() if pen[1].lemma_ == '-PRON-' else pen[1].lemma_) + '_' + \
+            #                   (pen[2].text.lower() if pen[2].lemma_ == '-PRON-' else pen[2].lemma_) + '_' + \
+            #                   (pen[3].text.lower() if pen[3].lemma_ == '-PRON-' else pen[3].lemma_) + '_' + \
+            #                   (pen[4].text.lower() if pen[4].lemma_ == '-PRON-' else pen[4].lemma_)
+            #
+            #     if ({pen[0].text, pen[1].text, pen[2].text, pen[3].text, pen[4].text}.intersection(punct) or
+            #             {pen[0].lemma_, pen[4].lemma_}.intersection(self.stop_words)):
+            #         continue
+            #     elif penta_lemma in pentagrams:
+            #         pentagrams[penta_lemma] += 1
+            #     else:
+            #         pentagrams[penta_lemma] = 1
+
+
+
+
+   def right_size(self, ngrams):
+        """
+        Loop through (n+1)grams (e.g., bi through tri) and find situations where current item (in bi) is a subset
+        of the found item (in tri).  Then test which has more explanatory power.  Either pull in the tri as an
+        explanation (if it's less strong) or (if the tri entry is stronger) delete the bi entry.  Why delete?
+        Becuase when we pull descriptive phrases later, we'll pull both the bi and the tri (which describe the same
+        thing.
+        :param ngrams: This dictionary eventually holds all of the ngrams, but at this point it should only hold the
+            ngrams that are bigger than the current dict.
+        :param current_grams:
+        :return:
+        """
+
+        # In this function "topic" is the list of context items--the phrases that help explain
+        context_phrases = self.topics
+        for ngram_lemma, ngram in ngrams.items():
+
+            # Don't waste time on thinly occurring items
+            if ngram['count'] < 3:
+                ngram['count'] = -1  # Not a meaningful change (since this would get dropped anyway).
+                continue
+
+            for context_phrase_lemma, context_phrase in context_phrases.items():
+                if ngram_lemma in context_phrase_lemma:
+                    # if ngram bigger than context_phrase +3, then we'll keep both, otherwise, only keep more
+                    # descriptive phrase (it'll be in the context_phrases dict)
+                    if ngram['count'] + 3 > context_phrase['n']:
+                        ngram['count'] -= context_phrase['count']
+                        ngram['textIDs'].difference_update(context_phrase['textIDs'])
+                    else:
+                        # We don't want to refer to this on in the future.
+                        ngram['count'] *= -1

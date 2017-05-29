@@ -7,6 +7,7 @@ Explains POS Tags: http://universaldependencies.org/en/pos/all.html#al-en-pos/DE
 # TODO: Create a "this matters" topic highlighter (min threshold).
 
 # IMPORTS
+import collections
 import spacy
 import spacy.symbols as ss
 import re
@@ -36,6 +37,7 @@ class TopicBuilder(object):
         # Match letters, numbers, spaces, underscores, and dashes. Ignore case. Must be 2 or more characters in length.
         self.phrase_pattern = re.compile('^[a-z0-9 _-]{2,}$', re.IGNORECASE)
         self.date_pattern = re.compile('20[0-9]{2}-[0-1][0-9]-[0-3][0-9]$')
+        self.punct = {p for p in string.punctuation}
         self.empty_words = {'a', 'an', 'that', 'the', 'this'}
         self.nouns = {ss.NOUN, ss.PROPN}
         self.entities = {ss.PERSON, ss.NORP, ss.FACILITY, ss.ORG, ss.GPE, ss.LOC, ss.PRODUCT, ss.EVENT, ss.WORK_OF_ART,
@@ -126,6 +128,122 @@ class TopicBuilder(object):
 
             title_doc = self.nlp(text['title'])
             text['title_doc'] = title_doc
+
+    def ngram_detection(self):
+        """
+        Create ngram counts (absolute and weighted) such that we can find most telling ngrams and know enough to 
+        (a) prioritize by topic, (b) tie them back to their underlying topic, (c) highlight in the UI
+        :return: 
+        """
+
+
+        # Build a series of dictionaries (could be all 1 dict, but thought performance would be better this way)
+        zip_grams = {}
+        ngrams = {}
+        for text_id, text in self.texts.items():
+
+            # Find pentagrams - ngrams with 5 words
+            for ngram in zip(text['doc'], text['doc'][1:], text['doc'][2:], text['doc'][3:], text['doc'][4:]):
+                self.ngram_counter(ngram, 5, zip_grams, text_id)
+
+            # Find pentagrams - ngrams with 5 words
+            for ngram in zip(text['doc'], text['doc'][1:], text['doc'][2:], text['doc'][3:]):
+                self.ngram_counter(ngram, 4, zip_grams, text_id)
+
+            for ngram in zip(text['doc'], text['doc'][1:], text['doc'][2:]):
+                self.ngram_counter(ngram, 3, zip_grams, text_id)
+
+            for ngram in zip(text['doc'], text['doc'][1:]):
+                self.ngram_counter(ngram, 2, zip_grams, text_id)
+
+            # single-word topics act a bit different (no zips or comprehensions)
+            for word in text['doc']:
+                word_lemma = word.text.lower() if word.lemma_ == '-PRON-' else word.lemma_
+
+                if ({word.text}.intersection(self.punct) or
+                        {word.lemma_}.intersection(self.stop_words)):
+                    continue
+                elif not (word.pos in self.nouns or word.ent_type in self.entities):
+                    continue
+                elif word_lemma in self.topics:
+                    self.topics[word_lemma]["count"] += 1
+                    self.topics[word_lemma]["textIDs"] |= {text_id}
+                    self.topics[word_lemma]["verbatims"] |= {word.text.lower()}
+                else:
+                    self.topics[word_lemma] = {"name": word_lemma,
+                                               "count": 1,
+                                               "textIDs": {text_id},
+                                               "n": 1,
+                                               "lemmas": {word_lemma},
+                                               "verbatims": {word.text.lower()},
+                                               "children": {}}  # TODO: This should go away...
+
+        zip_grams = {k:v for k,v in zip_grams.items() if v['count'] > 2}
+        for zip_key, zip_val in zip_grams.items():
+            for zip_plus_key, zip_plus_val in zip_grams.items():
+                if zip_key in zip_plus_key and zip_key != zip_plus_key:
+                    if zip_plus_val['count'] + 3 >= zip_val['count'] and \
+                                            len(zip_plus_val['textIDs']) + 3 >= len(zip_val['textIDs']):
+                        # TODO: Is this the right action (deleting shorter, but not much more explanatory) phrase?
+                        zip_val['count'] = -1
+
+        zip_grams = {k: v for k, v in zip_grams.items() if v['count'] > 2}
+
+        # TODO: verbatims sometimes have punctuation in them.
+        # Let's find the top X topics (based on max_topics)
+        # Create weighting, and count by bin.  Then determine biggest bin
+        rank_tracker = {}
+        for topic_lemma, topic in self.topics.items():
+
+            text_count = topic['textCount'] = len(topic['textIDs'])
+            if text_count in rank_tracker:
+                rank_tracker[text_count] += 1
+            else:
+                rank_tracker[text_count] = 1
+
+        max_bin = 0
+        agg_count = 0
+        for bin in sorted(rank_tracker, reverse=True):
+            agg_count += rank_tracker[bin]
+            if agg_count > self.max_topics:
+                max_bin = bin
+                break
+
+        # Add children
+        for topic_lemma, topic in self.topics.items():
+            if topic['textCount'] >= max_bin:
+                topic['children'] = {k: v for k, v in zip_grams.items() if topic_lemma in k and topic_lemma != k}
+                # topic['children'] = {k: v for k, v in self.topics.items() if topic_lemma in k}
+
+        x = "hello"
+
+    def ngram_counter(self, ngram, ngram_length, ngram_dict, text_id):
+
+        # TODO: Some odd lemma_ behavior: other -> oth, bring -> br (Genesis)
+        ngram_lemma = ' '.join(
+            [word.text.lower() if word.lemma_ == '-PRON-' else word.lemma_ for word in ngram])
+
+        # Only process this ngram is it's punctuation-free and the 1st / last words are not stopwords
+        # TODO: Drop the requirement for the last word to be a non-stopword and see what happens.
+        if ({word.text for word in ngram}.intersection(self.punct) or
+                {ngram[0].lemma_, ngram[ngram_length - 1].lemma_}.intersection(self.stop_words)):
+            return
+        # Only keep this ngram is it has 1+ nouns in it
+        elif len([word for word in ngram if word.pos in self.nouns or word.ent_type in self.entities]) == 0:
+            return
+        elif ngram_lemma in ngram_dict:
+            ngram_dict[ngram_lemma]["count"] += 1
+            ngram_dict[ngram_lemma]["textIDs"] |= {text_id}
+            ngram_dict[ngram_lemma]["verbatims"] |= {' '.join([word.text.lower() for word in ngram])}
+        else:
+            ngram_dict[ngram_lemma] = {"name": ngram_lemma,
+                                       "count": 1,
+                                       "textIDs": {text_id},
+                                       "n": ngram_length,
+                                       "verbatims": {' '.join([word.text.lower() for word in ngram])},
+                                       "lemmas": {lemma for lemma in ngram_lemma.split(' ') if
+                                                  lemma not in self.stop_words},
+                                       "children": {}}
 
     def summarize_texts(self):
         """
@@ -232,10 +350,14 @@ class TopicBuilder(object):
         :return: 
         """
 
+        # Calculate the importance of each ngram (used to determine relative explanatory power between ngrams
+        # and in the UI to size and rank slices.
+
         # format as a json-style list with name, size, rank (prepping for sunburst viz).
         topics = [{'name': topic['name'], 'count': topic['count'],
                    'verbatims': list(topic['verbatims']), 'textIDs': list(topic['textIDs']),
-                   'textCount': len(list(topic['textIDs'])),
+                   # 'textCount': len(list(topic['textIDs'])),
+                   'textCount': len(topic['textIDs']),
                    'children': topic['children']} for topic_id, topic in self.topics.items() if topic['count'] > 5]
         topics = sorted(topics, key=lambda topic: topic['textCount'], reverse=True)
 

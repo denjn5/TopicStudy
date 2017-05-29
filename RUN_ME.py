@@ -17,7 +17,7 @@ ORIG_CORPUS = ""  # An optional corpus (used for comparison); formatting may be 
 
 
 # GET THE TEXTS
-bt = get_bible_texts.GetBibleTexts("Genesis")  # Get properly formatted corpus (a python list of dictionaries).
+bt = get_bible_texts.GetBibleTexts("Psalms")  # Get properly formatted corpus (a python list of dictionaries).
 texts = bt.get_texts()
 corpus_name = bt.corpus_name
 
@@ -28,7 +28,8 @@ sent.add_sentiment()
 
 # FIND TOPICS
 tb = topic_builder.TopicBuilder(corpus_name, texts, max_topics=65)
-tb.topic_finder()
+# tb.topic_finder()
+tb.ngram_detection()
 # summary = tb.summarize_texts()
 
 # tfidf.tfidf_tutorial(texts)
