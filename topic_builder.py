@@ -7,7 +7,6 @@ Explains POS Tags: http://universaldependencies.org/en/pos/all.html#al-en-pos/DE
 # TODO: Create a "this matters" topic highlighter (min threshold).
 
 # IMPORTS
-import collections
 import spacy
 import spacy.symbols as ss
 import re
@@ -25,6 +24,10 @@ class TopicBuilder(object):
 
     def __init__(self, corpus_name, corpus, max_topics=40, data_date=''):
         """
+        To initialize, we'll (a) create some regex expressions and sets that will get used later in topic_builder; (b)
+        check the input arguments to ensure it's "as expected" for both topic_builder and the UI; (c) save the
+        arguments to variables and set up our primary output variables; and (d), grab a couple of files that have
+        contents that we'll use during processing.
         :param corpus_name: (str) A short (between 3 and 20 characters) human-readable name for this corpus of texts.
             It will show up in the UI and help us pass the file back-and-forth.
         :param corpus: (dict) A dictionary of texts that make up this corpus.
@@ -49,7 +52,9 @@ class TopicBuilder(object):
         assert data_date == '' or re.match(self.date_pattern, data_date), \
             'If you include a data_date, it must match the form 20YY-MM-DD.'
         assert type(corpus) is dict, 'The corpus must be a dictionary.'
+        assert len(corpus) > 0, 'The corpus of texts has no data.'
         assert type(max_topics) is int, 'The max_topics must be an integer.'
+        assert max_topics > 0, 'max_topics should be 1 or higher (or I will not return anything.'
 
         # Topic metadata & settings
         self.corpus_name = corpus_name.replace(' ', '')  # (str) The name of the set (or corpus) of texts.
@@ -57,7 +62,9 @@ class TopicBuilder(object):
         self.data_date = data_date
         self.model_output = {'name': corpus_name,
                              'data_date': data_date,
-                             'run_date': datetime.now().strftime("%Y-%m-%d %H:%M")}  # For results as json
+                             'run_date': datetime.now().strftime("%Y-%m-%d %H:%M"),
+                             'text_count': len(corpus),
+                             'max_topics': max_topics}  # For results as json
 
         # Primary Data
         self.texts = corpus  # The passed in dict of all texts that we'll analyze
@@ -139,7 +146,6 @@ class TopicBuilder(object):
 
         # Build a series of dictionaries (could be all 1 dict, but thought performance would be better this way)
         zip_grams = {}
-        ngrams = {}
         for text_id, text in self.texts.items():
 
             # Find pentagrams - ngrams with 5 words
@@ -178,7 +184,7 @@ class TopicBuilder(object):
                                                "verbatims": {word.text.lower()},
                                                "children": {}}  # TODO: This should go away...
 
-        zip_grams = {k:v for k,v in zip_grams.items() if v['count'] > 2}
+        zip_grams = {k: v for k, v in zip_grams.items() if v['count'] > 2}
         for zip_key, zip_val in zip_grams.items():
             for zip_plus_key, zip_plus_val in zip_grams.items():
                 if zip_key in zip_plus_key and zip_key != zip_plus_key:
@@ -203,10 +209,10 @@ class TopicBuilder(object):
 
         max_bin = 0
         agg_count = 0
-        for bin in sorted(rank_tracker, reverse=True):
-            agg_count += rank_tracker[bin]
+        for text_count in sorted(rank_tracker, reverse=True):
+            agg_count += rank_tracker[text_count]
             if agg_count > self.max_topics:
-                max_bin = bin
+                max_bin = text_count
                 break
 
         # Add children
@@ -218,6 +224,16 @@ class TopicBuilder(object):
         x = "hello"
 
     def ngram_counter(self, ngram, ngram_length, ngram_dict, text_id):
+        """
+        As we're looping through ngrams, handle the tests to see if we want to keep it (Does it contain a noun? Good.
+         Does it contain punctuation? Bad. Does it begin (or end) with a stopword? Bad). If we keep the phrase, then
+         we need to track a few things about it.
+        :param ngram: The phrase that we're testing (
+        :param ngram_length: int
+        :param ngram_dict: dict
+        :param text_id: The text that this ngram came from...
+        :return:
+        """
 
         # TODO: Some odd lemma_ behavior: other -> oth, bring -> br (Genesis)
         ngram_lemma = ' '.join(
