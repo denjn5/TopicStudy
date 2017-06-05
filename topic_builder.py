@@ -3,16 +3,15 @@ Review a series of texts and extract and group topics (nouns), maintaining a nou
 
 Explains POS Tags: http://universaldependencies.org/en/pos/all.html#al-en-pos/DET
 """
-# FEATURE: Add anaphora resolution (Hobbs on spaCy?)
-# TODO: Create a "this matters" topic highlighter (min threshold).
 
-# IMPORTS
-import spacy
-import spacy.symbols as ss
+from datetime import datetime
+import json
 import re
 import string
-import json
-from datetime import datetime
+
+import spacy
+import spacy.symbols as ss
+
 import config
 
 
@@ -36,17 +35,18 @@ class TopicBuilder(object):
             Required for the UI.
         """
 
-        # Test Patters and sets for use later in our topic model
-        # Match letters, numbers, spaces, underscores, and dashes. Ignore case. Must be 2 or more characters in length.
+        # Test Patterns and sets for use later in our topic model
+        # '^[a-z0-9 _-]{2,}$' --> Match letters, numbers, spaces, underscores, dashes. Ignore case. Length of 2 or more.
         self.phrase_pattern = re.compile('^[a-z0-9 _-]{2,}$', re.IGNORECASE)
         self.date_pattern = re.compile('20[0-9]{2}-[0-1][0-9]-[0-3][0-9]$')
         self.punct = {p for p in string.punctuation}
         self.empty_words = {'a', 'an', 'that', 'the', 'this'}
         self.nouns = {ss.NOUN, ss.PROPN}
         self.entities = {ss.PERSON, ss.NORP, ss.FACILITY, ss.ORG, ss.GPE, ss.LOC, ss.PRODUCT, ss.EVENT, ss.WORK_OF_ART,
-                         ss.LANGUAGE}
+                         ss.LANGUAGE}  # spaCy entities that indicate a proper noun.
 
         # Check the user arguments
+        # TODO: What data to I expect in the dictionary passed from the "get_" class?
         assert 2 < len(corpus_name) < 21 and re.match(self.phrase_pattern, corpus_name), \
             'A corpus_name (between 3 and 20 characters; made of letters, numbers, underscores, or dashes) is required.'
         assert data_date == '' or re.match(self.date_pattern, data_date), \
@@ -60,20 +60,24 @@ class TopicBuilder(object):
         self.corpus_name = corpus_name.replace(' ', '')  # (str) The name of the set (or corpus) of texts.
         self.max_topics = max_topics
         self.data_date = data_date
+
+        # Primary Data Structures
+        self.texts = corpus  # The passed in dict of all texts that we'll analyze
+        self.summary = {}  # A dictionary that we'll create here that has summary stats
+        self.topics = {}  # A dict that we'll populate with found Topics
         self.model_output = {'name': corpus_name,
                              'data_date': data_date,
                              'run_date': datetime.now().strftime("%Y-%m-%d %H:%M"),
                              'text_count': len(corpus),
-                             'max_topics': max_topics}  # For results as json
-
-        # Primary Data
-        self.texts = corpus  # The passed in dict of all texts that we'll analyze
-        self.summary = {}  # A dictionary that we'll create here that has summary stats
-        self.topics = {}  # A dict that we'll populate with found Topics
+                             'max_topics': max_topics,
+                             'dataDate': data_date,
+                             'runDate': datetime.now().strftime("%Y-%m-%d %H:%M"),
+                             'textCount': len(corpus),
+                             'maxTopics': max_topics}  # For results as json
 
         # Get known entities
         try:
-            with open(config.SRC_DIR + 'known_entities.txt', 'r') as file:
+            with open(config.INPUT_DIR + 'known_entities.txt', 'r') as file:
                 self.known_entities = set(file.read().split(' '))
         except IOError:
             print('Add a text file named "known_entities.txt" that lists named entities (space-delimited) that we '
@@ -82,7 +86,7 @@ class TopicBuilder(object):
 
         # Stop Words
         try:
-            with open(config.SRC_DIR + 'stop_words.txt', 'r') as file:
+            with open(config.INPUT_DIR + 'stop_words.txt', 'r') as file:
                 self.stop_words = set(file.read().split(' '))
         except IOError:
             print('Add a text file named "stop_words.txt" that lists common words (space-delimited) that we should '
@@ -142,7 +146,6 @@ class TopicBuilder(object):
         (a) prioritize by topic, (b) tie them back to their underlying topic, (c) highlight in the UI
         :return: 
         """
-
 
         # Build a series of dictionaries (could be all 1 dict, but thought performance would be better this way)
         zip_grams = {}
@@ -221,7 +224,6 @@ class TopicBuilder(object):
                 topic['children'] = {k: v for k, v in zip_grams.items() if topic_lemma in k and topic_lemma != k}
                 # topic['children'] = {k: v for k, v in self.topics.items() if topic_lemma in k}
 
-        x = "hello"
 
     def ngram_counter(self, ngram, ngram_length, ngram_dict, text_id):
         """
@@ -270,94 +272,6 @@ class TopicBuilder(object):
 
         return summary
 
-    def topic_finder(self, include_titles=False):
-        """
-        Loop through each entry in texts; analyze the texts for nouns. Create a Topic dict, even if we're not doing
-        a graph db.  
-        :return: (dict) A dictionary of topics and counts: { topic: count }
-        """
-
-        for text_id, text in self.texts.items():
-            # self.current_id = text_id  # text_id always remembers where we're at as we loop through our texts
-            doc = text['doc']
-            noun_chunk_boundaries = [(nc.start, nc.end) for nc in doc.noun_chunks]
-
-            for token in doc:
-
-                # We should only go beyond this point if this token is a noun or known entity, contains only vanilla
-                # characters (letters, numbers, etc.), and is *not* in our stop_words list.
-                topic_verbatim = token.text.strip().lower()  # this is the "verbatim" of the word
-                if not ((token.pos in self.nouns or token.ent_type in self.entities) and
-                            self.phrase_pattern.match(topic_verbatim) and topic_verbatim not in self.stop_words):
-                    continue
-
-                # Find Topics and Phrases
-                topic_lemma = token.lemma_
-                if token.pos == ss.PROPN or token.ent_type in self.entities:
-                    topic_lemma = topic_lemma.upper()
-
-                # Increment or add topic
-                if topic_lemma in self.topics:
-                    self.topics[topic_lemma]['count'] += 1
-                    self.topics[topic_lemma]['verbatims'].add(topic_verbatim)
-                    self.topics[topic_lemma]['textIDs'].add(text_id)
-                else:
-                    self.topics[topic_lemma] = {}
-                    self.topics[topic_lemma]['name'] = topic_lemma
-                    self.topics[topic_lemma]['count'] = 1
-                    self.topics[topic_lemma]['verbatims'] = {topic_verbatim}  # initialize a set
-                    self.topics[topic_lemma]['textIDs'] = {text_id}
-                    self.topics[topic_lemma]['children'] = {}
-
-                subtree = list(token.subtree)
-                if token.dep in {ss.nsubj, ss.nsubjpass}:
-                    subtree.append(token.head)
-
-                phrase_set = {(str(word) if word.lemma_ == '-PRON-' else word.lemma_) for
-                              word in subtree if word.lemma_ not in self.empty_words and
-                              word.text not in string.punctuation}
-
-                # phrase_lemma = ''.join([(str(word) if word.lemma_ == '-PRON-' else word.lemma_) for
-                #                         word in subtree if word.lemma_ not in self.stop_words])
-                # phrase_lemma = ''.join(char for char in phrase_lemma if char not in string.punctuation).replace(' ', '')
-
-                # TODO: Get better at finding good phrases
-                # ####  bake off  ####
-                # find noun_chunk
-
-                # st = ' '.join([word.text for word in subtree])
-                # # nc = ' '.join([str(nc) for nc in doc.noun_chunks if nc.start <= token.i < nc.end])
-                # v = str(token.head) if token.dep_ in 'nsubj' else ''
-                # print(topic_lemma + ': ' + st + ' | ' + v)
-
-                # Is the phrase different than the topic? Skip to the next loop if they're the same
-                # TODO: This seems to let same stuff through...
-                # if topic_lemma.lower() == phrase_lemma.lower():
-                #     continue
-
-                if not phrase_set - {topic_lemma.lower()}:  # false = empty set (complete match), so we add a not
-                    continue
-
-                if subtree[0].text.lower() in self.empty_words:
-                    subtree.pop(0)
-                phrase_verbatim = ' '.join([str(word) for word in subtree]).replace(" ,", ",").replace(" ;", ";")
-                phrase_verbatim = phrase_verbatim.strip(string.punctuation).lower().strip(' ')
-
-                phrase_lemma = '_'.join(sorted(phrase_set))
-                # print(phrase_lemma + ': ' + phrase_verbatim)
-
-                # Increment or add topic
-
-                if phrase_lemma in self.topics[topic_lemma]['children']:
-                    self.topics[topic_lemma]['children'][phrase_lemma]['count'] += 1
-                    self.topics[topic_lemma]['children'][phrase_lemma]['verbatims'].add(phrase_verbatim)
-                    self.topics[topic_lemma]['children'][phrase_lemma]['textIDs'].add(text_id)
-                else:
-                    self.topics[topic_lemma]['children'][phrase_lemma] = {}
-                    self.topics[topic_lemma]['children'][phrase_lemma]['name'] = phrase_lemma
-                    self.topics[topic_lemma]['children'][phrase_lemma]['count'] = 1
-                    self.topics[topic_lemma]['children'][phrase_lemma]['verbatims'] = {phrase_verbatim}
-                    self.topics[topic_lemma]['children'][phrase_lemma]['textIDs'] = {text_id}
 
     def export_topics(self):
         """
@@ -412,12 +326,12 @@ class TopicBuilder(object):
         # Prune topics over max_topics (default ~40): we stopped calc'ing rank over the max_topics
         self.model_output["children"] = [topic for topic in topics if 'rank' in topic]
 
+        # Build file name and save
         if self.data_date:
             date = datetime.strptime(self.data_date, "%Y-%m-%d").strftime('%d')  # from YYYY-MM-DD to DD
             file_name = 'Topics-{}-{}.txt'.format(self.corpus_name, date)
         else:
             file_name = 'Topics-{}.txt'.format(self.corpus_name)
 
-        # with open(save_location + 'topics_' + self.corpus_name + '.json', 'w') as f:
-        with open(config.SAVE_DIR + file_name, 'w') as file:
+        with open(config.OUTPUT_DIR + file_name, 'w') as file:
             json.dump(self.model_output, file)

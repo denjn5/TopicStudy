@@ -138,7 +138,7 @@ class GraphManager:
 
     def texts(self, texts):
         """
-        Add a series of Data to our graph db (s a transaction).
+        Add a series of Input to our graph db (s a transaction).
         :param texts: (str) A dictionary of entries.
         :return: 
         """
