@@ -225,9 +225,9 @@ class VecRelationships(object):
         # Build file name and save
         if self.data_date:
             date = datetime.strptime(self.data_date, "%Y-%m-%d").strftime('%d')  # from YYYY-MM-DD to DD
-            file_name = 'Vec-{}-{}.json'.format(self.corpus_name, date)
+            file_name = '{}-{}-Vec.json'.format(self.corpus_name, date)
         else:
-            file_name = 'Vec-{}.json'.format(self.corpus_name)
+            file_name = '{}-Vec.json'.format(self.corpus_name)
 
         with open(config.OUTPUT_DIR + file_name, 'w') as file:
             json.dump(self.model_output, file)

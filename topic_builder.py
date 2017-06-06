@@ -1,7 +1,10 @@
 """
-Review a series of texts and extract and group topics (nouns), maintaining a noun-phrase link to the original text.
+Review a list of texts. Extract and group topics (nouns), and contextual ngrams.
+Author: David Richards
+Date: June 2017
 
-Explains POS Tags: http://universaldependencies.org/en/pos/all.html#al-en-pos/DET
+Helpful links:
+* POS Tags: http://universaldependencies.org/en/pos/all.html#al-en-pos/DET
 """
 
 from datetime import datetime
@@ -23,11 +26,13 @@ class TopicBuilder(object):
 
     def __init__(self, corpus_name, corpus, max_topics=40, data_date=''):
         """
-        To initialize, we'll (a) create some regex expressions and sets that will get used later in topic_builder; (b)
-        check the input arguments to ensure it's "as expected" for both topic_builder and the UI; (c) save the
-        arguments to variables and set up our primary output variables; and (d), grab a couple of files that have
-        contents that we'll use during processing.
-        :param corpus_name: (str) A short (between 3 and 20 characters) human-readable name for this corpus of texts.
+        By the end of __init__ we'll have everything we need to study our texts. To get ready, we'll (a) create some
+        regex expressions and sets that we'll use later in topic_builder; (b) check the input arguments to ensure
+        they are "as expected" for both the class and the final UI; (c) save the arguments to variables and set up
+        our primary output variables; and (d), grab a couple of files that have contents that we'll use during
+        processing.
+
+        :param corpus_name: (str) A short (3 to 20 characters) human-readable name for this corpus of texts.
             It will show up in the UI and help us pass the file back-and-forth.
         :param corpus: (dict) A dictionary of texts that make up this corpus.
         :param max_topics: (int) What's the maximum number of topics to output to sunburst?
@@ -62,14 +67,10 @@ class TopicBuilder(object):
         self.data_date = data_date
 
         # Primary Data Structures
-        self.texts = corpus  # The passed in dict of all texts that we'll analyze
-        self.summary = {}  # A dictionary that we'll create here that has summary stats
-        self.topics = {}  # A dict that we'll populate with found Topics
+        self.texts = corpus  # The dict of dicts that contains all of our texts for analysis: {text_id: {}}
+        self.topics = {}  # A dict of dicts for primary topics: {topic: {}}
+        self.ngrams = {}  # A dict of dicts for ngrams that will help us understand primary topics: {ngram_lemma: {}}
         self.model_output = {'name': corpus_name,
-                             'data_date': data_date,
-                             'run_date': datetime.now().strftime("%Y-%m-%d %H:%M"),
-                             'text_count': len(corpus),
-                             'max_topics': max_topics,
                              'dataDate': data_date,
                              'runDate': datetime.now().strftime("%Y-%m-%d %H:%M"),
                              'textCount': len(corpus),
@@ -93,55 +94,66 @@ class TopicBuilder(object):
                   'ignore in most text processing.')
             self.stop_words = set()
 
-        self._tokenize()
-
-    def _tokenize(self):
-        """
-        Create spaCy token lists from the original text strings from self.texts['text']. 
-        :return: 
-        """
-
-        # Loop through texts looking for important known entities and entity n-grams
+        # Loop through texts and tokenize
         for text_id, text in self.texts.items():
-            doc = self.nlp(text['text'].strip())
+            text['doc'] = self._tokenize(text['text'])
+            text['titleDoc'] = self._tokenize(text['title'])
+            text['textClean'] = ' '.join([token.text.lower() if token.lemma_ == '-PRON-' else token.lemma_ for
+                                          token in text['doc'] if token.lemma_ not in
+                                          self.stop_words and token.text not in self.punct])
 
-            # Loop through tokens and find known entities aren't already marked
-            for token in doc:
-                # Is this word in our known_entities, but is not recognized by the spaCy parser?
-                if token.text.lower() in self.known_entities and token.ent_type not in self.entities:
-                    # We need to set the new entity to doc.ents directly (I believe the getter for doc.ents does
-                    #     some important massaging.  However, counter to the online docs, setting doc.ents wipes out
-                    #     all of the previously recognized ents, so we stash the value, then we combine and reset.
-                    stash = doc.ents
-                    doc.ents = [(token.text.title(), doc.vocab.strings['PERSON'], token.i, token.i + 1)]
-                    doc.ents = doc.ents + stash
+    def _tokenize(self, raw_text):
+        """
+        Called by __init__, _tokenize begins with the plain text from our source, text['text'], applies the spaCy
+        language model to create a token list. Then we loop through each token, looking for 'known entities'. Known
+        Entities are from our own file; we use this check to ensure that the language modeler (specifically the POS,
+        part of speech, tagger) correctly recognizes important named entities (proper nouns that we think are really
+        important, but that are sometimes mis-typed by the model). Second, we look for, then join, multi-word named
+        entities.  These are nearly always referring to the same thing (e.g., first name, last name).
 
-            # Find proper noun n-grams: (a) find a known entity, (b) is the next word also a known entity?,
-            #   (c) merge, (d) repeat
-            doc_len = len(doc)  # Helps us know when to exit the 'for loop' (since we change the # of items via merge)
-            for token in doc:
-                if token.i + 1 < doc_len and token.ent_type in self.entities and \
-                                token.text.lower() not in self.stop_words and token.text not in ' ':
-                    next_token = doc[token.i + 1]
-                    while token.i + 1 < doc_len and next_token.ent_type == token.ent_type and \
-                                    next_token.text.lower() not in self.stop_words and next_token.text not in ' ':
-                        n_gram = doc[token.i:token.i + 2]
-                        n_gram.merge()
-                        doc_len -= 1  # the merge changes the list length, so we just shrunk the list!
-                        # print(x)
-                if token.i + 1 >= doc_len:
-                    break
+        :param raw_text: (str) The raw text for analysis.
+        :return: (spaCy tokens) The processed text in the form of spaCy tokens.
+        """
 
-            text['doc'] = doc
-            # text['tokens'] = [word for word in doc]
-            # text['tokensClean'] = [str(word.lemma_).lower() for word in doc
-            #                        if word.is_alpha and (str(word).lower() not in self.stop_words)]
+        doc = self.nlp(raw_text.strip())
 
-            title_doc = self.nlp(text['title'])
-            text['title_doc'] = title_doc
+        # Loop through tokens and find known entities aren't already marked
+        for token in doc:
+            # Is this word in our known_entities, but is not recognized by the spaCy parser?
+            if token.text.lower() in self.known_entities and token.ent_type not in self.entities:
+                # We need to set the new entity to doc.ents directly (I believe the getter for doc.ents does
+                #     some important massaging.  However, counter to the online docs, setting doc.ents wipes out
+                #     all of the previously recognized ents, so we stash the value, then we combine and reset.
+                stash = doc.ents
+                doc.ents = [(token.text.title(), doc.vocab.strings['PERSON'], token.i, token.i + 1)]
+                doc.ents = doc.ents + stash
+
+        # Find proper noun n-grams: (a) find a known entity, (b) is the next word also a known entity?,
+        #   (c) merge, (d) repeat
+        # TODO: Joining mult-word named entities sometimes causes us trouble.
+        doc_len = len(doc)  # Helps us know when to exit the 'for loop' (since we change the # of items via merge)
+        for token in doc:
+            # if we're not at the end of the loop, and we recognize this as a proper noun and it's not a stop word
+            # and the token isn't a space...
+            if token.i + 1 < doc_len and token.ent_type in self.entities and \
+                            token.text.lower() not in self.stop_words and token.text not in ' ':
+                next_token = doc[token.i + 1]
+                # keep looping while we're not at the end of the loop and this token has the same entity type as
+                # the previous token and it's not a stop word or a space.
+                while token.i + 1 < doc_len and next_token.ent_type == token.ent_type and \
+                                next_token.text.lower() not in self.stop_words and next_token.text not in ' ':
+                    n_gram = doc[token.i:token.i + 2]
+                    n_gram.merge()
+                    doc_len -= 1  # the merge changes the list length, so we just shrunk the list!
+                    # print(x)
+            if token.i + 1 >= doc_len:
+                break
+
+        return doc
 
     def ngram_detection(self):
         """
+        Find all ngrams within our raw text
         Create ngram counts (absolute and weighted) such that we can find most telling ngrams and know enough to 
         (a) prioritize by topic, (b) tie them back to their underlying topic, (c) highlight in the UI
         :return: 
@@ -155,7 +167,7 @@ class TopicBuilder(object):
             for ngram in zip(text['doc'], text['doc'][1:], text['doc'][2:], text['doc'][3:], text['doc'][4:]):
                 self.ngram_counter(ngram, 5, zip_grams, text_id)
 
-            # Find pentagrams - ngrams with 5 words
+            # Find pentagrams - ngrams with 4 words
             for ngram in zip(text['doc'], text['doc'][1:], text['doc'][2:], text['doc'][3:]):
                 self.ngram_counter(ngram, 4, zip_grams, text_id)
 
@@ -166,11 +178,11 @@ class TopicBuilder(object):
                 self.ngram_counter(ngram, 2, zip_grams, text_id)
 
             # single-word topics act a bit different (no zips or comprehensions)
+            # store data in self.topics, not zip_grams
             for word in text['doc']:
                 word_lemma = word.text.lower() if word.lemma_ == '-PRON-' else word.lemma_
 
-                if ({word.text}.intersection(self.punct) or
-                        {word.lemma_}.intersection(self.stop_words)):
+                if ({word.text}.intersection(self.punct) or {word.lemma_}.intersection(self.stop_words)):
                     continue
                 elif not (word.pos in self.nouns or word.ent_type in self.entities):
                     continue
@@ -182,12 +194,14 @@ class TopicBuilder(object):
                     self.topics[word_lemma] = {"name": word_lemma,
                                                "count": 1,
                                                "textIDs": {text_id},
-                                               "n": 1,
-                                               "lemmas": {word_lemma},
-                                               "verbatims": {word.text.lower()},
-                                               "children": {}}  # TODO: This should go away...
+                                               # "lemmas": {word_lemma},
+                                               "verbatims": {word.text.lower()}}
 
+        # Eliminate rarely occurring ngrams
         zip_grams = {k: v for k, v in zip_grams.items() if v['count'] > 2}
+
+        # Loop through each ngram...
+        # TODO: should I only let each ngram be inspected by the ngram that's 1 less than it in length?
         for zip_key, zip_val in zip_grams.items():
             for zip_plus_key, zip_plus_val in zip_grams.items():
                 if zip_key in zip_plus_key and zip_key != zip_plus_key:
@@ -195,7 +209,9 @@ class TopicBuilder(object):
                                             len(zip_plus_val['textIDs']) + 3 >= len(zip_val['textIDs']):
                         # TODO: Is this the right action (deleting shorter, but not much more explanatory) phrase?
                         zip_val['count'] = -1
+                        # TODO: Is this enough?  Or will I end up double explaining things sometimes?
 
+        # Eliminate newly demoted items
         zip_grams = {k: v for k, v in zip_grams.items() if v['count'] > 2}
 
         # TODO: verbatims sometimes have punctuation in them.
@@ -224,43 +240,47 @@ class TopicBuilder(object):
                 topic['children'] = {k: v for k, v in zip_grams.items() if topic_lemma in k and topic_lemma != k}
                 # topic['children'] = {k: v for k, v in self.topics.items() if topic_lemma in k}
 
-
     def ngram_counter(self, ngram, ngram_length, ngram_dict, text_id):
         """
         As we're looping through ngrams, handle the tests to see if we want to keep it (Does it contain a noun? Good.
          Does it contain punctuation? Bad. Does it begin (or end) with a stopword? Bad). If we keep the phrase, then
          we need to track a few things about it.
-        :param ngram: The phrase that we're testing (
-        :param ngram_length: int
-        :param ngram_dict: dict
+        :param ngram: (spaCy tokens tuple) The phrase that we're testing
+        :param ngram_length: (int) The length of the ngram
+        :param ngram_dict: (dict)
         :param text_id: The text that this ngram came from...
         :return:
         """
 
-        # TODO: Some odd lemma_ behavior: other -> oth, bring -> br (Genesis)
-        ngram_lemma = ' '.join(
-            [word.text.lower() if word.lemma_ == '-PRON-' else word.lemma_ for word in ngram])
 
         # Only process this ngram is it's punctuation-free and the 1st / last words are not stopwords
         # TODO: Drop the requirement for the last word to be a non-stopword and see what happens.
         if ({word.text for word in ngram}.intersection(self.punct) or
                 {ngram[0].lemma_, ngram[ngram_length - 1].lemma_}.intersection(self.stop_words)):
             return
+
         # Only keep this ngram is it has 1+ nouns in it
-        elif len([word for word in ngram if word.pos in self.nouns or word.ent_type in self.entities]) == 0:
+        if len([word for word in ngram if word.pos in self.nouns or word.ent_type in self.entities]) == 0:
             return
-        elif ngram_lemma in ngram_dict:
+
+        # TODO: Some odd lemma_ behavior: other -> oth, bring -> br (Genesis)
+        ngram_lemma = ' '.join([word.text.lower() if word.lemma_ == '-PRON-' else word.lemma_ for word in ngram])
+        verbatim = ' '.join([word.text.lower() for word in ngram])
+
+        # Keep it! And it's not the first time we've found it.
+        if ngram_lemma in ngram_dict:
             ngram_dict[ngram_lemma]["count"] += 1
             ngram_dict[ngram_lemma]["textIDs"] |= {text_id}
-            ngram_dict[ngram_lemma]["verbatims"] |= {' '.join([word.text.lower() for word in ngram])}
+            ngram_dict[ngram_lemma]["verbatims"] |= {verbatim}
+        # Keep it! This is the 1st instance.
         else:
             ngram_dict[ngram_lemma] = {"name": ngram_lemma,
                                        "count": 1,
                                        "textIDs": {text_id},
                                        "n": ngram_length,
-                                       "verbatims": {' '.join([word.text.lower() for word in ngram])},
-                                       "lemmas": {lemma for lemma in ngram_lemma.split(' ') if
-                                                  lemma not in self.stop_words},
+                                       "verbatims": {verbatim},
+                                       # "lemmas": {lemma for lemma in ngram_lemma.split(' ') if
+                                       #            lemma not in self.stop_words},
                                        "children": {}}
 
     def summarize_texts(self):
@@ -271,7 +291,6 @@ class TopicBuilder(object):
         summary = {'text': ''.join([text['text'] for text_id, text in self.texts.items()])}
 
         return summary
-
 
     def export_topics(self):
         """
@@ -286,9 +305,9 @@ class TopicBuilder(object):
         # format as a json-style list with name, size, rank (prepping for sunburst viz).
         topics = [{'name': topic['name'], 'count': topic['count'],
                    'verbatims': list(topic['verbatims']), 'textIDs': list(topic['textIDs']),
-                   # 'textCount': len(list(topic['textIDs'])),
                    'textCount': len(topic['textIDs']),
-                   'children': topic['children']} for topic_id, topic in self.topics.items() if topic['count'] > 5]
+                   'children': '' if 'children' not in topic else topic['children']}
+                  for topic_id, topic in self.topics.items() if topic['count'] > 5]
         topics = sorted(topics, key=lambda topic: topic['textCount'], reverse=True)
 
         rank = 1
@@ -329,9 +348,9 @@ class TopicBuilder(object):
         # Build file name and save
         if self.data_date:
             date = datetime.strptime(self.data_date, "%Y-%m-%d").strftime('%d')  # from YYYY-MM-DD to DD
-            file_name = 'Topics-{}-{}.txt'.format(self.corpus_name, date)
+            file_name = '{}-{}-Topics.txt'.format(self.corpus_name, date)
         else:
-            file_name = 'Topics-{}.txt'.format(self.corpus_name)
+            file_name = '{}-Topics.txt'.format(self.corpus_name)
 
         with open(config.OUTPUT_DIR + file_name, 'w') as file:
             json.dump(self.model_output, file)

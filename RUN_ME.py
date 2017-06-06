@@ -16,10 +16,13 @@ USE_LOCAL_SOURCE=False
 
 def main():
     # GET THE TEXTS
-    bt = get_bible.GetBible("Psalms")  # Get properly formatted corpus (a python list of dictionaries).
+    bt = get_bible.GetBible("Mark")  # Get properly formatted corpus (a python list of dictionaries).
     texts = bt.get_texts(save_source=SAVE_SOURCE, use_local_source=USE_LOCAL_SOURCE)
     corpus_name = bt.corpus_name
 
+    if len(texts) == 0:
+        print("No data from get_. Check your args.")
+        return
 
     # ADD SENTIMENT
     sent = sentiment.calculateSentiment(texts)
@@ -35,7 +38,6 @@ def main():
     vr = vec_relationships.VecRelationships(corpus_name, texts)
     vr.doc2vec()
     vr.export_json()
-
 
     # summary['keySentences'] = fr.key_sentences(summary['text'])
     # TODO: send in clean tokens to keywords
