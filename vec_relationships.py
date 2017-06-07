@@ -71,7 +71,6 @@ class VecRelationships(object):
                   'ignore in most text processing.')
             self.stop_words = set()
 
-
     def keywords(self, raw, word_count=5):
         """
         Find the top n words in the texts based on Gensim's TextRank model.
@@ -122,16 +121,18 @@ class VecRelationships(object):
         :return:
         """
 
-        # Format texts for Doc2Vec model
-        # Clean (no stop words, only alpha word): {reference: [first, sentence, second sentence]}
-        sentences = []
-        for text_id, text in self.texts.items():
-            clean_text = ''.join([char for char in text['text'] if char not in self.punct])
-            clean_text = ' '.join([word.lower() for word in clean_text.split(' ') if word.lower() not in self.stop_words])
-            sentences.append(TaggedDocument(clean_text, [text_id]))
+        # Format texts for Doc2Vec model: Create a list of TaggedDocument objects. Each text should be
+        # clean (no stop words, only alpha word).
+        textClean = []
+        try:
+            for text_id, text in self.texts.items():
+                textClean.append(TaggedDocument(text['textClean'], [text_id]))
+        except:
+            print("I expected each text as a sting of words (no stopwords or punctuation) "
+                  "in text['textClean']. Create that by initializing topic_builder.")
 
         # Train, trim, save Doc2Vec model
-        d2v = gensim.models.Doc2Vec(sentences, size=size, window=window, min_count=min_count, sample=sample,
+        d2v = gensim.models.Doc2Vec(textClean, size=size, window=window, min_count=min_count, sample=sample,
                                     negative=negative, workers=7)
 
         d2v.docvecs.init_sims(replace=True)  # No further training?
@@ -154,11 +155,10 @@ class VecRelationships(object):
                         doc_links.append({'source': doc1, 'target': doc2, 'value': int(sim * 1000)})
 
         self.model_output["doc2vecSettings"] = {"size": size, "window": window, "minCount": min_count,
-                                               "docCount": len(docs), "minLink": min_link}
+                                                "docCount": len(docs), "minLink": min_link}
         self.model_output["doc2vecLinks"] = doc_links
 
-
-    def word2vec(self, tokens, size=100, window=5, min_count=3, sg=0, max_words=100, min_link=0.2, pickle=False):
+    def word2vec(self, size=100, window=5, min_count=3, sg=0, max_words=100, min_link=0.2, pickle=False):
         """
         Train a Word2Vec model.
         Note: The "you must first build vocabulary before training the model" usually means that you haven't provided
@@ -174,6 +174,17 @@ class VecRelationships(object):
         :param pickle: (bool) Should the model be saved?
         :return:
         """
+        # TODO: Should I divide tokens into sentences?
+
+        # Format texts for Doc2Vec model: Create a list of TaggedDocument objects. Each text should be
+        # clean (no stop words, only alpha word).
+        tokens = []
+        try:
+            for text_id, text in self.texts.items():
+                tokens.append(text['textClean'].split(' '))
+        except:
+            print("I expected each text as a sting of words (no stopwords or punctuation) "
+                  "in text['textClean']. Create that by initializing topic_builder.")
 
         # Train, trim, save Word2Vec model
         w2v = gensim.models.Word2Vec(tokens, size=size, window=window, min_count=min_count, sg=sg, workers=4)
@@ -206,14 +217,14 @@ class VecRelationships(object):
                     if abs(sim) > min_link:  # skip weak relationships
                         # re-range sim from [1:0:-1] to [5:10:15] -- prep for force diagram
                         # TODO: Is this length value okay? Consider strength component to output.
-                        word_links.append({'source': word1[0], 'target': word2[0], 'value': int((sim * -5) + 10)})
+                        word_links.append({'source': word1[0], 'target': word2[0], 'value': int(sim * 100)})
 
         # SAVE JSON (twice)
-        self.model_output["word2vec"] = {'w2v_size': size, 'w2v_window': window, 'w2v_min_count': min_count,
+        self.model_output["word2vecSettings"] = {'w2v_size': size, 'w2v_window': window, 'w2v_min_count': min_count,
                                          'w2v_sg': sg,
                                          'w2v_word_count': len(nodes), 'max_words': max_words, 'min_link': min_link}
-        self.model_output['words'] = nodes
-        self.model_output['word_links'] = word_links
+        self.model_output['word2vecWords'] = nodes
+        self.model_output['word2vecLinks'] = word_links
 
     def export_json(self):
         """

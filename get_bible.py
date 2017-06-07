@@ -36,7 +36,7 @@ class GetBible(object):
         """
         # TODO: Implement version
         assert not (use_local_source and save_source), "Either use_local_source or save_source should be false. " \
-                                                       "Doesn't sense to use the local file and then save right back over it."
+                                                       "Doesn't sense to use the local file and save a local file."
         assert version.lower() in {"kjv", "esv"}, "I only know ESV and KJV."
 
         if use_local_source:
@@ -67,9 +67,8 @@ class GetBible(object):
                 # '<span[^>]+>|</span>|[''"`]' --> Looks span tags or span close or several types of quote marks
                 text = re.sub(r'<span[^>]+>|</span>|[''"`]', '', row['text']).strip(' ').replace('  ', ' ')
 
-                self.texts[bk + '_' + ch] = {"author": "", "title": bk + ' ' + ch, "sentiment": 0, "source": bk,
-                                             "text": text, "topics": {}, "tokens": "", "tokensClean": "",
-                                             "titleTokens": "", "urlQueryString": bk + '+' + ch}
+                self.texts[bk + '_' + ch] = {"title": bk + ' ' + ch, "source": bk, "text": text,
+                                             "url": 'www.esv.org/{}+{}'.format(bk, ch), "logoFile": "esv.png"}
 
             if save_source:
                 file_name = '{}-ESV.json'.format(self.corpus_name)
@@ -77,42 +76,6 @@ class GetBible(object):
                     json.dump(self.texts, file)
 
         return self.texts
-
-    def export_texts(self):
-        """
-        Gets our analyzed texts list ready for UI. Crete htmlCard and jettison fields that we no longer need.
-        NOTE: Assumes that we've already populated **sentiment** and **topics** (outside of this class).
-        :return: None
-        """
-
-        # A template for the html card that will get presented in the UI
-        html_card = "<div class='card bs-callout {card_sent}' id='card_{id}'>" \
-                    "<div class='cardTime'>{time}</div>" \
-                    "<a href='{url}' target='_blank'><img src='{logo_path}' class='cardImage' /></a>" \
-                    "<div class='cardTitle h4'>" \
-                    "<a href='javascript:void(0);' onclick='cardToggle({id})'>{card_title}</a></div>" \
-                    "<a href='javascript:void(0);' onclick='cardToggle({id})'>" \
-                    "<i class='fa fa-minus-square-o fa-lg cardToggle'></i></a>" \
-                    "<div class='cardText' id='text_{id}'>{card_text}</div>" \
-                    "</div>"
-
-        save_texts = []  #
-        for text_id, text in self.texts.items():
-            sent_class = 'bs-callout-neg' if text['sentiment'] < -0.33 else ('bs-callout-pos'
-                                                                             if text['sentiment'] > 0.33 else '')
-            card = html_card.format(id=text_id, card_sent=sent_class, time='', logo_path='Logos\esv.png',
-                                           card_title=text['title'],
-                                           url='https://www.esv.org/' + text['urlQueryString'],
-                                           card_text=text['text'])
-
-            topics = {k: list(v) for k, v in text['topics'].items()}  # turn dict sets into dict lists
-
-            save_texts.append({"id": text_id, "title": text['title'], "sentiment": text['sentiment'],
-                               "text": text['text'], "topics": topics, "htmlCard": card})
-
-        file_name = '{}-Texts.txt'.format(self.corpus_name)
-        with open(config.OUTPUT_DIR + file_name, 'w') as file:
-            json.dump(save_texts, file)
 
 
 if __name__ == "__main__":

@@ -2,8 +2,8 @@
 Running this file makes all of the key stuff happen.
 """
 
+import common
 import get_bible
-import sentiment
 import tfidf
 import topic_builder
 import vec_relationships
@@ -16,7 +16,7 @@ USE_LOCAL_SOURCE=False
 
 def main():
     # GET THE TEXTS
-    bt = get_bible.GetBible("Mark")  # Get properly formatted corpus (a python list of dictionaries).
+    bt = get_bible.GetBible("Psalms")  # Get properly formatted corpus (a python list of dictionaries).
     texts = bt.get_texts(save_source=SAVE_SOURCE, use_local_source=USE_LOCAL_SOURCE)
     corpus_name = bt.corpus_name
 
@@ -25,8 +25,7 @@ def main():
         return
 
     # ADD SENTIMENT
-    sent = sentiment.calculateSentiment(texts)
-    sent.add_sentiment()
+    sent = common.add_sentiment(texts)
 
     # FIND TOPICS
     tb = topic_builder.TopicBuilder(corpus_name, texts, max_topics=40)
@@ -36,7 +35,8 @@ def main():
     # tfidf.tfidf_tutorial(texts)
 
     vr = vec_relationships.VecRelationships(corpus_name, texts)
-    vr.doc2vec()
+    # vr.doc2vec()
+    vr.word2vec()
     vr.export_json()
 
     # summary['keySentences'] = fr.key_sentences(summary['text'])
@@ -47,7 +47,7 @@ def main():
 
     # SEND IT TO JSON
     tb.export_topics()
-    bt.export_texts()
+    common.export_texts(texts, corpus_name)
 
 
 if __name__ == "__main__":

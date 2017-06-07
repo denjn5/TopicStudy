@@ -94,7 +94,9 @@ class TopicBuilder(object):
                   'ignore in most text processing.')
             self.stop_words = set()
 
-        # Loop through texts and tokenize
+        # Loop through texts and tokenize: 'doc' and 'titleDoc' are lists of spaCy tokens, with named entities called
+        # recognized and joined. 'textClean' is a string of lemmatized words, excluding stopwords and punctuation.
+        # It's used by Doc2Vec.
         for text_id, text in self.texts.items():
             text['doc'] = self._tokenize(text['text'])
             text['titleDoc'] = self._tokenize(text['title'])
