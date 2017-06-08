@@ -30,8 +30,12 @@ class VecRelationships(object):
 
     def __init__(self, corpus_name, corpus, data_date=''):
         """
-        :param corpus: The texts that we want to analyze.
-        :param corpus_name: The differentiating file name for saving/retrieving
+        To get ready to study our texts by vector (read gensim!) we'll (a) create some regex expressions and sets for
+         use later; (b) check the input arguments to ensure they are "as expected" for both the class; and (c) save
+         the arguments to class variables and set up our primary output variables.
+        :param corpus_name: (str) The differentiating file name for saving/retrieving
+        :param corpus: (dict) The texts that we want to analyze.
+        :param data_date: (str: YYYY-MM-DD; optional) Indicates the date that the data covers (*not* when we ran it).
         """
 
         # Test Patterns and sets for use later in our topic model
@@ -61,15 +65,6 @@ class VecRelationships(object):
                              'dataDate': data_date,
                              'runDate': datetime.now().strftime("%Y-%m-%d %H:%M"),
                              'textCount': len(corpus)}  # For results as json
-
-        # Stop Words
-        try:
-            with open(config.INPUT_DIR + 'stop_words.txt', 'r') as file:
-                self.stop_words = set(file.read().split(' '))
-        except IOError:
-            print('Add a text file named "stop_words.txt" that lists common words (space-delimited) that we should '
-                  'ignore in most text processing.')
-            self.stop_words = set()
 
     def keywords(self, raw, word_count=5):
         """
@@ -221,8 +216,9 @@ class VecRelationships(object):
 
         # SAVE JSON (twice)
         self.model_output["word2vecSettings"] = {'w2v_size': size, 'w2v_window': window, 'w2v_min_count': min_count,
-                                         'w2v_sg': sg,
-                                         'w2v_word_count': len(nodes), 'max_words': max_words, 'min_link': min_link}
+                                                 'w2v_sg': sg,
+                                                 'w2v_word_count': len(nodes), 'max_words': max_words,
+                                                 'min_link': min_link}
         self.model_output['word2vecWords'] = nodes
         self.model_output['word2vecLinks'] = word_links
 

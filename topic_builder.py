@@ -24,7 +24,7 @@ class TopicBuilder(object):
     """
     nlp = spacy.load('en')
 
-    def __init__(self, corpus_name, corpus, max_topics=40, data_date=''):
+    def __init__(self, corpus_name, corpus, data_date=''):
         """
         By the end of __init__ we'll have everything we need to study our texts. To get ready, we'll (a) create some
         regex expressions and sets that we'll use later in topic_builder; (b) check the input arguments to ensure
@@ -35,7 +35,6 @@ class TopicBuilder(object):
         :param corpus_name: (str) A short (3 to 20 characters) human-readable name for this corpus of texts.
             It will show up in the UI and help us pass the file back-and-forth.
         :param corpus: (dict) A dictionary of texts that make up this corpus.
-        :param max_topics: (int) What's the maximum number of topics to output to sunburst?
         :param data_date: (str: YYYY-MM-DD) The date of the data we're pulling. Passed through to the JSON.
             Required for the UI.
         """
@@ -58,12 +57,9 @@ class TopicBuilder(object):
             'If you include a data_date, it must match the form 20YY-MM-DD.'
         assert type(corpus) is dict, 'The corpus must be a dictionary.'
         assert len(corpus) > 0, 'The corpus of texts has no data.'
-        assert type(max_topics) is int, 'The max_topics must be an integer.'
-        assert max_topics > 0, 'max_topics should be 1 or higher (or I will not return anything.'
 
         # Topic metadata & settings
         self.corpus_name = corpus_name.replace(' ', '')  # (str) The name of the set (or corpus) of texts.
-        self.max_topics = max_topics
         self.data_date = data_date
 
         # Primary Data Structures
@@ -73,8 +69,7 @@ class TopicBuilder(object):
         self.model_output = {'name': corpus_name,
                              'dataDate': data_date,
                              'runDate': datetime.now().strftime("%Y-%m-%d %H:%M"),
-                             'textCount': len(corpus),
-                             'maxTopics': max_topics}  # For results as json
+                             'textCount': len(corpus)}  # For results as json
 
         # Get known entities
         try:
@@ -153,7 +148,7 @@ class TopicBuilder(object):
 
         return doc
 
-    def ngram_detection(self):
+    def ngram_detection(self, min_topic_count=5, min_text_id_count=5):
         """
         Find all ngrams within our raw text
         Create ngram counts (absolute and weighted) such that we can find most telling ngrams and know enough to 
@@ -161,34 +156,35 @@ class TopicBuilder(object):
         :return: 
         """
 
-        # Build a series of dictionaries (could be all 1 dict, but thought performance would be better this way)
-        zip_grams = {}
+        # Populate self.ngrams and self.topics
         for text_id, text in self.texts.items():
 
             # Find pentagrams - ngrams with 5 words
             for ngram in zip(text['doc'], text['doc'][1:], text['doc'][2:], text['doc'][3:], text['doc'][4:]):
-                self.ngram_counter(ngram, 5, zip_grams, text_id)
+                self._ngram_counter(ngram, 5, text_id)
 
             # Find pentagrams - ngrams with 4 words
             for ngram in zip(text['doc'], text['doc'][1:], text['doc'][2:], text['doc'][3:]):
-                self.ngram_counter(ngram, 4, zip_grams, text_id)
+                self._ngram_counter(ngram, 4, text_id)
 
             for ngram in zip(text['doc'], text['doc'][1:], text['doc'][2:]):
-                self.ngram_counter(ngram, 3, zip_grams, text_id)
+                self._ngram_counter(ngram, 3, text_id)
 
             for ngram in zip(text['doc'], text['doc'][1:]):
-                self.ngram_counter(ngram, 2, zip_grams, text_id)
+                self._ngram_counter(ngram, 2, text_id)
 
             # single-word topics act a bit different (no zips or comprehensions)
             # store data in self.topics, not zip_grams
             for word in text['doc']:
                 word_lemma = word.text.lower() if word.lemma_ == '-PRON-' else word.lemma_
 
-                if ({word.text}.intersection(self.punct) or {word.lemma_}.intersection(self.stop_words)):
+                if {word.text}.intersection(self.punct) or {word.lemma_}.intersection(self.stop_words):
                     continue
-                elif not (word.pos in self.nouns or word.ent_type in self.entities):
+
+                if not (word.pos in self.nouns or word.ent_type in self.entities):
                     continue
-                elif word_lemma in self.topics:
+
+                if word_lemma in self.topics:
                     self.topics[word_lemma]["count"] += 1
                     self.topics[word_lemma]["textIDs"] |= {text_id}
                     self.topics[word_lemma]["verbatims"] |= {word.text.lower()}
@@ -196,53 +192,46 @@ class TopicBuilder(object):
                     self.topics[word_lemma] = {"name": word_lemma,
                                                "count": 1,
                                                "textIDs": {text_id},
-                                               # "lemmas": {word_lemma},
                                                "verbatims": {word.text.lower()}}
 
-        # Eliminate rarely occurring ngrams
-        zip_grams = {k: v for k, v in zip_grams.items() if v['count'] > 2}
+        # Add text_id_count (the number of texts that the topic occurs in; so a topic might occur 50 times,
+        # but it's only mentioned in 3 different texts, we'd show 3.
+        for _, topic in self.topics.items():
+            topic['text_id_count'] = len(topic['textIDs'])
+        for _, ngram in self.ngrams.items():
+            ngram['text_id_count'] = len(ngram['textIDs'])
 
-        # Loop through each ngram...
-        # TODO: should I only let each ngram be inspected by the ngram that's 1 less than it in length?
-        for zip_key, zip_val in zip_grams.items():
-            for zip_plus_key, zip_plus_val in zip_grams.items():
-                if zip_key in zip_plus_key and zip_key != zip_plus_key:
-                    if zip_plus_val['count'] + 3 >= zip_val['count'] and \
-                                            len(zip_plus_val['textIDs']) + 3 >= len(zip_val['textIDs']):
-                        # TODO: Is this the right action (deleting shorter, but not much more explanatory) phrase?
-                        zip_val['count'] = -1
-                        # TODO: Is this enough?  Or will I end up double explaining things sometimes?
+        # Eliminate rarely occurring topics and ngrams.
+        self.topics = {k: v for k, v in self.topics.items() if
+                       v['text_id_count'] >= min_text_id_count and v['count'] >= min_topic_count}
+        self.ngrams = {k: v for k, v in self.ngrams.items() if
+                       v['text_id_count'] >= min_text_id_count}
+
+
+        # Loop through each ngram pair: outer loop is all ngrams, inner loop is all ngrams
+        for ngram_lemma, ngram in self.ngrams.items():
+            for ngram_plus_lemma, ngram_plus in self.ngrams.items():
+                # only stay in this loop if the inner ngram is one word longer than the outer loop and if the
+                # inner loop lemma contains the outer group lemma (avoid partial word matches like man in woman)
+                # r'\b' + ngram_lemma + r'\b' --> does the ngram lemma fit in ngram_plus lemma (\b is word boundary)
+                if ngram['n'] + 1 != ngram_plus['n']:
+                    continue
+
+                if not re.search(r'\b' + ngram_lemma + r'\b', ngram_plus_lemma):
+                    continue
+
+                # Is the absolute count of occurrences and the count of text_id occurrences both big enough to use it
+                # instead of the other loop?
+                if ngram_plus['count'] + 3 >= ngram['count'] and \
+                                        ngram_plus['text_id_count'] + 3 >= ngram['text_id_count']:
+                    # TODO: Is this the right action (deleting shorter, but not much more explanatory) phrase?
+                    # TODO: Is this enough?  Or will I end up double explaining things sometimes?
+                    ngram['count'] = -1
 
         # Eliminate newly demoted items
-        zip_grams = {k: v for k, v in zip_grams.items() if v['count'] > 2}
+        self.ngrams = {ngram_lemma: ngram for ngram_lemma, ngram in self.ngrams.items() if ngram['count'] > 0}
 
-        # TODO: verbatims sometimes have punctuation in them.
-        # Let's find the top X topics (based on max_topics)
-        # Create weighting, and count by bin.  Then determine biggest bin
-        rank_tracker = {}
-        for topic_lemma, topic in self.topics.items():
-
-            text_count = topic['textCount'] = len(topic['textIDs'])
-            if text_count in rank_tracker:
-                rank_tracker[text_count] += 1
-            else:
-                rank_tracker[text_count] = 1
-
-        max_bin = 0
-        agg_count = 0
-        for text_count in sorted(rank_tracker, reverse=True):
-            agg_count += rank_tracker[text_count]
-            if agg_count > self.max_topics:
-                max_bin = text_count
-                break
-
-        # Add children
-        for topic_lemma, topic in self.topics.items():
-            if topic['textCount'] >= max_bin:
-                topic['children'] = {k: v for k, v in zip_grams.items() if topic_lemma in k and topic_lemma != k}
-                # topic['children'] = {k: v for k, v in self.topics.items() if topic_lemma in k}
-
-    def ngram_counter(self, ngram, ngram_length, ngram_dict, text_id):
+    def _ngram_counter(self, ngram, ngram_length, text_id):
         """
         As we're looping through ngrams, handle the tests to see if we want to keep it (Does it contain a noun? Good.
          Does it contain punctuation? Bad. Does it begin (or end) with a stopword? Bad). If we keep the phrase, then
@@ -254,9 +243,10 @@ class TopicBuilder(object):
         :return:
         """
 
-
         # Only process this ngram is it's punctuation-free and the 1st / last words are not stopwords
-        # TODO: Drop the requirement for the last word to be a non-stopword and see what happens.
+        # Tried allowing last word to be stopwords, quality suffered.
+        # Line mechanics: make a set, look for an intersection with another set
+        # TODO: verbatims sometimes have punctuation in them.
         if ({word.text for word in ngram}.intersection(self.punct) or
                 {ngram[0].lemma_, ngram[ngram_length - 1].lemma_}.intersection(self.stop_words)):
             return
@@ -270,77 +260,93 @@ class TopicBuilder(object):
         verbatim = ' '.join([word.text.lower() for word in ngram])
 
         # Keep it! And it's not the first time we've found it.
-        if ngram_lemma in ngram_dict:
-            ngram_dict[ngram_lemma]["count"] += 1
-            ngram_dict[ngram_lemma]["textIDs"] |= {text_id}
-            ngram_dict[ngram_lemma]["verbatims"] |= {verbatim}
+        if ngram_lemma in self.ngrams:
+            self.ngrams[ngram_lemma]["count"] += 1
+            self.ngrams[ngram_lemma]["textIDs"] |= {text_id}
+            self.ngrams[ngram_lemma]["verbatims"] |= {verbatim}
         # Keep it! This is the 1st instance.
         else:
-            ngram_dict[ngram_lemma] = {"name": ngram_lemma,
-                                       "count": 1,
-                                       "textIDs": {text_id},
-                                       "n": ngram_length,
-                                       "verbatims": {verbatim},
-                                       # "lemmas": {lemma for lemma in ngram_lemma.split(' ') if
-                                       #            lemma not in self.stop_words},
-                                       "children": {}}
+            self.ngrams[ngram_lemma] = {"name": ngram_lemma,
+                                        "count": 1,
+                                        "textIDs": {text_id},
+                                        "n": ngram_length,
+                                        "verbatims": {verbatim}}
 
-    def summarize_texts(self):
-        """
-        Add an entry to the summary dict that contains all texts.
-        :return: Return the summary dict.
-        """
-        summary = {'text': ''.join([text['text'] for text_id, text in self.texts.items()])}
+    def prune_topics_and_adopt(self, max_topics=40):
 
-        return summary
+        # To find the top X topics (based on max_topics), we'll create a dict that counts the number of topics at
+        # each "text ID count" (text ID count = the number of texts that the topic occurs in; so a topic might occur
+        # 50 times, but it's only mentioned in 3 different texts, we'd show 3).
+        rank_tracker = {}  # {text_id_count: X}
+        for topic_lemma, topic in self.topics.items():
+
+            text_id_count = topic['textIDCount'] = len(topic['textIDs'])
+            if text_id_count in rank_tracker:
+                rank_tracker[text_id_count] += 1
+            else:
+                rank_tracker[text_id_count] = 1
+
+        # How low do we need to go in text_id_counts to get to get our max_topic count?.
+        min_text_id_count = 0  # the min text_id_count that's allowable in the final output
+        aggregate_topic_count = 0  # tracks the number of topics that we've found at this text_id_count and higher
+        for text_id_count in sorted(rank_tracker, reverse=True):
+            aggregate_topic_count += rank_tracker[text_id_count]
+            if aggregate_topic_count > max_topics:  # once we've crossed our max, we'll add these in and stop looping
+                min_text_id_count = text_id_count
+                break
+
+        # Only keep topics that fit within our max_topics list
+        self.topics = {k: v for k, v in self.topics.items() if v['textIDCount'] >= min_text_id_count}
+
+        # Add children
+        for topic_lemma, topic in self.topics.items():
+            topic['children'] = {k: v for k, v in self.ngrams.items() if re.search(r'\b{}\b'.format(topic_lemma), k)}
 
     def export_topics(self):
         """
-        Save topics to Topics-XYZ.txt in the Output directory.  Along the way we'll sort, rank, recalculate at least
-        on field for the UI, and prune the dataset (dropping low-usage topics).
-        :return: 
+        Save topics data to XYZ-Topics.txt. Along the way we'll sort, rank, recalculate some fields (to prep for UI).
+         Then prune the dataset (dropping low-usage topics, subtopics).
+        :param min_topic_occurs: (int)
+        :param min_subtopic_occurs: (int)
+        :param max_topics: (int) What's the maximum number of topics to output to sunburst?
+        :return:
         """
 
-        # Calculate the importance of each ngram (used to determine relative explanatory power between ngrams
-        # and in the UI to size and rank slices.
-
-        # format as a json-style list with name, size, rank (prepping for sunburst viz).
+        # format as a list (for json output), then sort descending by textIDCount
         topics = [{'name': topic['name'], 'count': topic['count'],
                    'verbatims': list(topic['verbatims']), 'textIDs': list(topic['textIDs']),
-                   'textCount': len(topic['textIDs']),
+                   'textIDCount': topic['textIDCount'],
                    'children': '' if 'children' not in topic else topic['children']}
-                  for topic_id, topic in self.topics.items() if topic['count'] > 5]
-        topics = sorted(topics, key=lambda topic: topic['textCount'], reverse=True)
+                  for topic_id, topic in self.topics.items()]
+        topics = sorted(topics, key=lambda topic: topic['textIDCount'], reverse=True)
 
         rank = 1
         prev_count = 0
         for i, topic in enumerate(topics):
-            current_count = topic['textCount']
+            current_count = topic['textIDCount']
 
-            if current_count < prev_count:  # this topic occurs left often than the last one
+            if current_count < prev_count:  # this topic occurs less often than the last one
                 rank = i + 1
-                if rank > self.max_topics:
-                    break
 
             topic['rank'] = rank
             # Prune low-use phrases and the 'phrase' attribute
             # topic['children'] = []
             topic['children'] = [{'name': child['name'], 'count': child['count'],
                                   'verbatims': list(child['verbatims']), 'textIDs': list(child['textIDs']),
-                                  'textCount': len(list(child['textIDs']))}
+                                  'textIDCount': len(list(child['textIDs']))}
                                  for child_id, child in topic['children'].items() if child['count'] > 3]
 
-            topic['children'] = sorted(topic['children'], key=lambda lemma: lemma['textCount'], reverse=True)
+            topic['children'] = sorted(topic['children'], key=lambda lemma: lemma['textIDCount'], reverse=True)
 
             # If the subtopic count is greater than the topic count, than calc a multiplier to size each subtopic
-            child_count = sum([child['textCount'] for child in topic['children']])
-            child_count_multiplier = 1 if child_count < topic['textCount'] else topic['textCount'] / child_count
+            child_count = sum([child['textIDCount'] for child in topic['children']])
+            child_count_multiplier = 1 if child_count < topic['textIDCount'] else topic['textIDCount'] / child_count
 
             for child in topic['children']:
                 child['rank'] = rank
-                child['size'] = child['textCount'] * child_count_multiplier
+                child['size'] = child['textIDCount'] * child_count_multiplier
 
-            topic['size'] = topic['textCount'] - (child_count * child_count_multiplier)
+            topic['size'] = topic['textIDCount'] - (child_count * child_count_multiplier)
             # topic['size'] = topic['textCount'] - child_count if topic['textCount'] >= child_count else 0
             prev_count = current_count
 
