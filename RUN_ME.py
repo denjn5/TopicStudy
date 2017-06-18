@@ -5,7 +5,7 @@ Running this file makes all of the key stuff happen.
 import common
 import get_bible
 import tfidf
-import topic_builder
+import topic
 import vec_relationships
 
 
@@ -16,7 +16,7 @@ USE_LOCAL_SOURCE=False
 
 def main():
     # GET THE TEXTS
-    bt = get_bible.GetBible("Psalms")  # Get properly formatted corpus (a python list of dictionaries).
+    bt = get_bible.GetBible("Proverbs")  # Get properly formatted corpus (a python list of dictionaries).
     texts = bt.get_texts(save_source=SAVE_SOURCE, use_local_source=USE_LOCAL_SOURCE)
     corpus_name = bt.corpus_name
 
@@ -28,8 +28,9 @@ def main():
     sent = common.add_sentiment(texts)
 
     # FIND TOPICS
-    tb = topic_builder.TopicBuilder(corpus_name, texts, max_topics=40)
-    tb.ngram_detection()
+    tb = topic.Topic(corpus_name, texts)
+    tb.detect_ngram()
+    tb.prune_topics_and_adopt()
     # summary = tb.summarize_texts()
 
     # tfidf.tfidf_tutorial(texts)

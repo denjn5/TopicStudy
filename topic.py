@@ -1,5 +1,5 @@
 """
-Review a list of texts. Extract and group topics (nouns), and contextual ngrams.
+Manages the topic data objectReview a list of texts. Extract and group topics (nouns), and contextual ngrams.
 Author: David Richards
 Date: June 2017
 
@@ -7,10 +7,10 @@ Helpful links:
 * POS Tags: http://universaldependencies.org/en/pos/all.html#al-en-pos/DET
 """
 
-from datetime import datetime
 import json
 import re
 import string
+from datetime import datetime
 
 import spacy
 import spacy.symbols as ss
@@ -18,7 +18,7 @@ import spacy.symbols as ss
 import config
 
 
-class TopicBuilder(object):
+class Topic(object):
     """
     Review a series of texts and extract topics (nouns), maintaining a noun-phrase link to the original texts.
     """
@@ -148,7 +148,27 @@ class TopicBuilder(object):
 
         return doc
 
-    def ngram_detection(self, min_topic_count=5, min_text_id_count=4):
+    def increment_topic(self, topic, text_id, verbatim):
+        """
+        The value of each topic in self.topics is a dict.
+        If this topic already exists, then simply increment. Otherwise, add the topic dict.
+        :param topic: The lemma of the topic word or phrase
+        :param text_id: The ID where this instance of the topic was found
+        :param verbatim: The original form of this word
+        :return:
+        """
+        if topic in self.topics:
+            self.topics[topic]["count"] += 1
+            self.topics[topic]["textIDs"] |= {text_id}
+            self.topics[topic]["verbatims"] |= {verbatim}
+        else:
+            self.topics[topic] = {"name": topic,
+                                  "count": 1,
+                                  "textIDs": {text_id},
+                                  "verbatims": {verbatim},
+                                  "subtopics": {}}
+
+    def detect_ngram(self, min_topic_count=5, min_text_id_count=4):
         """
         Find all ngrams within our raw text
         Create ngram counts (absolute and weighted) such that we can find most telling ngrams and know enough to 
@@ -160,24 +180,13 @@ class TopicBuilder(object):
             # single-word topics act a bit different (no zips or comprehensions)
             # store data in self.topics, not zip_grams
             for word in text['doc']:
-                word_lemma = word.text.lower() if word.lemma_ == '-PRON-' else word.lemma_
+                # word_lemma = word.text.lower() if word.lemma_ == '-PRON-' else word.lemma_
 
                 if {word.text}.intersection(self.punct) or {word.lemma_}.intersection(self.stop_words):
                     continue
 
-                if not (word.pos in self.nouns or word.ent_type in self.entities):
-                    continue
-
-                if word_lemma in self.topics:
-                    self.topics[word_lemma]["count"] += 1
-                    self.topics[word_lemma]["textIDs"] |= {text_id}
-                    self.topics[word_lemma]["verbatims"] |= {word.text.lower()}
-                else:
-                    self.topics[word_lemma] = {"name": word_lemma,
-                                               "count": 1,
-                                               "textIDs": {text_id},
-                                               "verbatims": {word.text.lower()},
-                                               "subtopics": {}}
+                if word.pos in self.nouns or word.ent_type in self.entities:
+                    self.increment_topic(word.lemma_, text_id, word.text.lower())
 
         # Populate self.ngrams and self.topics
         for text_id, text in self.texts.items():
@@ -196,7 +205,6 @@ class TopicBuilder(object):
 
             for ngram in zip(doc, doc[1:]):
                 self._ngram_counter(ngram, 2, text_id, doc)
-
 
         # Add text_id_count (the number of texts that the topic occurs in; so a topic might occur 50 times,
         # but it's only mentioned in 3 different texts, we'd show 3.
@@ -268,7 +276,6 @@ class TopicBuilder(object):
                 else:
                     self.topics[word.lemma_]['subtopics'][ngram_lemma] = {text_id}
 
-        # TODO: Do I even need self.ngrams anymore? Maybe track everything in the subtopics area?
         # Keep it! And it's not the first time we've found it.
         if ngram_lemma in self.ngrams:
             self.ngrams[ngram_lemma]["count"] += 1
