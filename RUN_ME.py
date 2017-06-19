@@ -3,7 +3,7 @@ Running this file makes all of the key stuff happen.
 """
 
 import common
-import get_bible
+import bible
 import tfidf
 import topic
 import vec_relationships
@@ -16,7 +16,7 @@ USE_LOCAL_SOURCE=False
 
 def main():
     # GET THE TEXTS
-    bt = get_bible.GetBible("Proverbs")  # Get properly formatted corpus (a python list of dictionaries).
+    bt = bible.Bible("Proverbs")  # Get properly formatted corpus (a python list of dictionaries).
     texts = bt.get_texts(save_source=SAVE_SOURCE, use_local_source=USE_LOCAL_SOURCE)
     corpus_name = bt.corpus_name
 

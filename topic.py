@@ -12,6 +12,7 @@ import re
 import string
 from datetime import datetime
 
+import pandas as pd
 import spacy
 import spacy.symbols as ss
 

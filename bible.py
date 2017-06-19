@@ -12,7 +12,7 @@ import pandas as pd
 import config
 
 
-class GetBible(object):
+class Bible(object):
     """
     Get Bible texts for topic modeling.
     """
@@ -49,36 +49,42 @@ class GetBible(object):
                 use_local_source = False  # If we couldn't get source locally, get it from origin...
                 save_source = True  # ...and save it for next time
 
-        if not use_local_source:
-            # Read raw file into pandas
+        else:
+            # Read raw file into pandas and get the correct selection
             df = pd.read_csv(config.INPUT_DIR + version.lower() + '.csv', sep='|')
+            df['key'] = df['book'].str.lower() + '_' + df['chapter'].map(str)
+            df['title'] = df['book'] + ' ' + df['chapter'].map(str)
+            df['url'] = 'www.esv.org/' + df['book'] + '+' + df['chapter'].map(str)
+            df['logoFile'] = 'esv.png'
+            df['text'].replace(to_replace='<span[^>]+>|</span>|[''"`]', value=r'', regex=True, inplace=True)
+            df['text'].str.strip().replace(to_replace='  ', value=r' ', regex=False, inplace=True)
+            df.rename(columns={'book': 'source'}, inplace=True)
+            del df['chapter']
 
-            # Get book that user requested
-            if self.corpus_name == 'Bible':
-                selection = df
-            else:
-                selection = df[(df['book'] == self.corpus_name)]
+            selection = df if self.corpus_name.lower() == 'bible' else df[(df['source'] == self.corpus_name)]
+
             # TODO: What if nothing is returned?
 
-            # Loop through selection and turn it into a dictionary of entries
+            # Loop through selection and turn it into a dictionary of entries (df --> dict)
             for i, row in selection.iterrows():
-                bk = row['book']
-                ch = str(int(row['chapter']))
-                # '<span[^>]+>|</span>|[''"`]' --> Looks span tags or span close or several types of quote marks
-                text = re.sub(r'<span[^>]+>|</span>|[''"`]', '', row['text']).strip(' ').replace('  ', ' ')
+                self.texts[row['key']] = {"title": row['title'], "source": row['source'], "text": row['text'],
+                                             "url": row['url'], "logoFile": row['logoFile']}
 
-                self.texts[bk + '_' + ch] = {"title": bk + ' ' + ch, "source": bk, "text": text,
-                                             "url": 'www.esv.org/{}+{}'.format(bk, ch), "logoFile": "esv.png"}
+            # http://www.rationalgirl.com/blog/html/2013/04/15/pandas__create_dataframe.html
+
 
             if save_source:
                 file_name = '{}-ESV.json'.format(self.corpus_name)
                 with open(config.SOURCE_DIR + file_name, 'w') as file:
                     json.dump(self.texts, file)
 
+                file_name = '{}-ESV.pickle'.format(self.corpus_name)
+                df.to_pickle(config.SOURCE_DIR + file_name)
+
+
         return self.texts
 
 
 if __name__ == "__main__":
-    gt = GetBible("Genesis")
+    gt = Bible("Genesis")
     gt.get_texts()
-    gt.export_texts()
