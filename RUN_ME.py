@@ -10,22 +10,23 @@ import vec_relationships
 
 
 MAX_TOPICS = 40
-SAVE_SOURCE = True
-USE_LOCAL_SOURCE=False
+SAVE_SOURCE = False
+USE_LOCAL_SOURCE=True
 
 
 def main():
     # GET THE TEXTS
-    bt = bible.Bible("Proverbs")  # Get properly formatted corpus (a python list of dictionaries).
-    texts = bt.get_texts(save_source=SAVE_SOURCE, use_local_source=USE_LOCAL_SOURCE)
-    corpus_name = bt.corpus_name
+    bib = bible.Bible("Proverbs")  # Get properly formatted corpus (a python list of dictionaries).
+    texts = bib.get_texts(save_source=SAVE_SOURCE, use_local_source=USE_LOCAL_SOURCE)
+    corpus_name = bib.corpus_name
 
-    if len(texts) == 0:
+    if len(bib) == 0:  # calls bible.__len__
         print("No data from get_. Check your args.")
         return
 
     # ADD SENTIMENT
-    sent = common.add_sentiment(texts)
+    common.add_sentiment(texts, bib.df_texts)
+
 
     # FIND TOPICS
     tb = topic.Topic(corpus_name, texts)

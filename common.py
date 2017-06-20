@@ -67,7 +67,7 @@ def export_texts(texts, corpus_name, data_date='', text_length_max=16000):
         json.dump(save_texts, file)
 
 
-def add_sentiment(texts):
+def add_sentiment(texts, df_texts):
     """
     Calculates sentiment for a text using VaderSentiment as a sentiment calculation between -1 and 1.
     :param texts: A dict of texts: {text_id: {text: 'abc', title: 'xyz'}}
@@ -75,6 +75,14 @@ def add_sentiment(texts):
         {text_id: {text: 'abc', title: 'xyz', sentiment: 0}}
     """
     analyzer = SentimentIntensityAnalyzer()
+    # df_texts['sentiment'] = analyzer.polarity_scores(df_texts['text'].str)
+
+    for index, row in df_texts.iterrows():
+        sentiment = analyzer.polarity_scores(row['text'])
+        row['sentiment'] = sentiment['compound']
+
     for text_id, text in texts.items():
         vs = analyzer.polarity_scores(text['text'])
         text['sentiment'] = vs['compound']  # compound
+
+
