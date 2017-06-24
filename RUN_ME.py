@@ -11,12 +11,12 @@ import vec_relationships
 
 MAX_TOPICS = 40
 SAVE_SOURCE = False
-USE_LOCAL_SOURCE=True
+USE_LOCAL_SOURCE=False
 
 
 def main():
     # GET THE TEXTS
-    bib = bible.Bible("Proverbs")  # Get properly formatted corpus (a python list of dictionaries).
+    bib = bible.Bible("Matthew")  # Get properly formatted corpus (a python list of dictionaries).
     texts = bib.get_texts(save_source=SAVE_SOURCE, use_local_source=USE_LOCAL_SOURCE)
     corpus_name = bib.corpus_name
 
@@ -25,7 +25,7 @@ def main():
         return
 
     # ADD SENTIMENT
-    common.add_sentiment(texts, bib.df_texts)
+    common.add_sentiment(texts)
 
 
     # FIND TOPICS
@@ -36,10 +36,10 @@ def main():
 
     # tfidf.tfidf_tutorial(texts)
 
-    vr = vec_relationships.VecRelationships(corpus_name, texts)
+    # vr = vec_relationships.VecRelationships(corpus_name, texts)
     # vr.doc2vec()
-    vr.word2vec()
-    vr.export_json()
+    # vr.word2vec()
+    # vr.export_json()
 
     # summary['keySentences'] = fr.key_sentences(summary['text'])
     # TODO: send in clean tokens to keywords

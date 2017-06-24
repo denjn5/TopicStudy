@@ -2,13 +2,17 @@
 A series of functions that'll be used commonly by other classes throughout TopicStudy
 """
 
-from datetime import datetime
 import json
+from datetime import datetime
+
+import pandas as pd
 
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
-# alt: from vaderSentiment import SentimentIntensityAnalyzer
 
 import config
+
+
+# alt: from vaderSentiment import SentimentIntensityAnalyzer
 
 
 def export_texts(texts, corpus_name, data_date='', text_length_max=16000):
@@ -39,35 +43,37 @@ def export_texts(texts, corpus_name, data_date='', text_length_max=16000):
                 "</div>"
 
     save_texts = []
-    for text_id, text in texts.items():
-        sent_class = 'bs-callout-neg' if text['sentiment'] < -0.33 else ('bs-callout-pos'
-                                                                         if text['sentiment'] > 0.33 else '')
+    for _, row in texts.iterrows():
+        # for text_id, text in texts.items():
+        sent_class = 'bs-callout-neg' if row['sentiment'] < -0.33 else ('bs-callout-pos'
+                                                                        if row['sentiment'] > 0.33 else '')
 
         # Are either (or both) post time and text count available?
-        time_and_count = (('' if 'time' not in text else text['time']) + ' | ' +
-                         ('' if 'count' not in text else 'text count: <i>' + text['count'] + '</i>')).strip(' |')
+        time_and_count = (('' if pd.isnull(row['time']) else row['time']) + ' | ' +
+                          ('' if pd.isnull(row['count']) else 'text count: <i>' + row['count'] + '</i>')).strip(' |')
 
-        card = html_card.format(id=text_id, card_sent=sent_class,
+        card = html_card.format(id=row['textId'], card_sent=sent_class,
                                 time_and_count=time_and_count,
-                                logo_path=r'Logos\\' + text['logoFile'],
-                                card_title=text['title'],
-                                url='https://{}'.format(text['url']),
-                                card_text=text['text'][:text_length_max])
+                                logo_path=r'Logos\\' + row['logoFile'],
+                                card_title=row['title'],
+                                url='https://{}'.format(row['url']),
+                                card_text=row['text'][:text_length_max])
 
-        save_texts.append({"id": text_id, "title": text['title'], "sentiment": text['sentiment'],
-                           "text": text['text'], "source": text['source'], "htmlCard": card})
+        save_texts.append({"id": row['textId'], "title": row['title'], "sentiment": row['sentiment'],
+                           "text": row['text'], "source": row['source'], "htmlCard": card})
 
-    # Build file name and save
-    if data_date:
-        date = datetime.strptime(data_date, "%Y-%m-%d").strftime('%d')  # from YYYY-MM-DD to DD
-        file_name = '{}-{}-Texts.txt'.format(corpus_name, date)
-    else:
-        file_name = '{}-Texts.txt'.format(corpus_name)
-    with open(config.OUTPUT_DIR + file_name, 'w') as file:
-        json.dump(save_texts, file)
+        # Build file name and save
+        if data_date:
+            date = datetime.strptime(data_date, "%Y-%m-%d").strftime('%d')  # from YYYY-MM-DD to DD
+            file_name = '{}-{}-Texts.txt'.format(corpus_name, date)
+        else:
+            file_name = '{}-Texts.txt'.format(corpus_name)
+
+        with open(config.OUTPUT_DIR + file_name, 'w') as file:
+            json.dump(save_texts, file)
 
 
-def add_sentiment(texts, df_texts):
+def add_sentiment(texts):
     """
     Calculates sentiment for a text using VaderSentiment as a sentiment calculation between -1 and 1.
     :param texts: A dict of texts: {text_id: {text: 'abc', title: 'xyz'}}
@@ -77,12 +83,6 @@ def add_sentiment(texts, df_texts):
     analyzer = SentimentIntensityAnalyzer()
     # df_texts['sentiment'] = analyzer.polarity_scores(df_texts['text'].str)
 
-    for index, row in df_texts.iterrows():
+    for index, row in texts.iterrows():
         sentiment = analyzer.polarity_scores(row['text'])
         row['sentiment'] = sentiment['compound']
-
-    for text_id, text in texts.items():
-        vs = analyzer.polarity_scores(text['text'])
-        text['sentiment'] = vs['compound']  # compound
-
-

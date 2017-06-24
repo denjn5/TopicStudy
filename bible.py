@@ -4,9 +4,6 @@ Author: David Richards
 Date: June 2017
 """
 
-import json
-import re
-
 import pandas as pd
 
 import config
@@ -24,7 +21,7 @@ class Bible(object):
         """
         self.texts = {}  # The dict of dicts that contains the raw text and metadata.
         self.corpus_name = book  # the requested Bible book or full Bible
-        self.df_texts = None  # Will hold a pandas dataframe of our selection
+        # self.df_texts = None  # Will hold a pandas dataframe of our selection
 
     def __len__(self):
         """
@@ -32,8 +29,6 @@ class Bible(object):
         :return:
         """
         return len(self.texts)
-
-
 
     def get_texts(self, use_local_source=False, save_source=False, version='esv'):
         """
@@ -65,25 +60,29 @@ class Bible(object):
                 save_source = True  # ...and save it for next time
 
         else:
+            # Create base dataframe
+            columns = ['textId', 'title', 'titleDoc', 'text', 'textDoc', 'textClean', 'sentiment', 'url',
+                       'logoFile', 'time', 'date', 'count']
+            df = pd.DataFrame(columns=columns)
+
             # Read raw file into pandas and get the correct selection
-            df = pd.read_csv(config.INPUT_DIR + version.lower() + '.csv', sep='|')
-            df['key'] = df['book'].str.lower() + '_' + df['chapter'].map(str)
-            df['title'] = df['book'] + ' ' + df['chapter'].map(str)
-            df['url'] = 'www.esv.org/' + df['book'] + '+' + df['chapter'].map(str)
+            df_get = pd.read_csv(config.INPUT_DIR + version.lower() + '.csv', sep='|')
+            df['textId'] = df_get['book'].str.lower() + '_' + df_get['chapter'].map(str)
+            df['title'] = df_get['book'] + ' ' + df_get['chapter'].map(str)
+            df['url'] = 'www.esv.org/' + df_get['book'] + '+' + df_get['chapter'].map(str)
             df['logoFile'] = 'esv.png'
-            df['sentiment'] = ''
-            df['text'].replace(to_replace='<span[^>]+>|</span>|[''"`]', value=r'', regex=True, inplace=True)
-            df['text'].str.strip().replace(to_replace='  ', value=r' ', regex=False, inplace=True)
-            df.rename(columns={'book': 'source'}, inplace=True)
-            del df['chapter']
+            df_get['text'].replace(to_replace='<span[^>]+>|</span>|[''"`]', value=r'', regex=True, inplace=True)
+            df_get['text'].str.strip().replace(to_replace='  ', value=r' ', regex=False, inplace=True)
+            df['text'] = df_get['text']
+            df['source'] = df_get['book']
 
         # We should have texts, now lets select something
-        self.df_texts = df if self.corpus_name.lower() == 'bible' else df[(df['source'] == self.corpus_name)]
+        self.texts = df if self.corpus_name.lower() == 'bible' else df[(df['source'] == self.corpus_name)]
 
         # Loop through selection and turn it into a dictionary of entries (df --> dict)
-        for i, row in self.df_texts.iterrows():
-            self.texts[row['key']] = {"title": row['title'], "source": row['source'], "text": row['text'],
-                                         "url": row['url'], "logoFile": row['logoFile']}
+        # for i, row in self.df_texts.iterrows():
+        #     self.texts[row['textId']] = {"title": row['title'], "source": row['source'], "text": row['text'],
+        #                                  "url": row['url'], "logoFile": row['logoFile']}
 
         if save_source:
             file_name = config.SOURCE_DIR + '{}-ESV.pkl'.format(self.corpus_name)

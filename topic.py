@@ -35,7 +35,7 @@ class Topic(object):
 
         :param corpus_name: (str) A short (3 to 20 characters) human-readable name for this corpus of texts.
             It will show up in the UI and help us pass the file back-and-forth.
-        :param corpus: (dict) A dictionary of texts that make up this corpus.
+        :param corpus: (dataframe) A dictionary of texts that make up this corpus.
         :param data_date: (str: YYYY-MM-DD) The date of the data we're pulling. Passed through to the JSON.
             Required for the UI.
         """
@@ -56,7 +56,8 @@ class Topic(object):
             'A corpus_name (between 3 and 20 characters; made of letters, numbers, underscores, or dashes) is required.'
         assert data_date == '' or re.match(self.date_pattern, data_date), \
             'If you include a data_date, it must match the form 20YY-MM-DD.'
-        assert type(corpus) is dict, 'The corpus must be a dictionary.'
+        assert type(corpus) is pd.core.frame.DataFrame, 'The corpus must be a dictionary.'
+        # assert type(corpus) is dict, 'The corpus must be a dictionary.'
         assert len(corpus) > 0, 'The corpus of texts has no data.'
 
         # Topic metadata & settings
@@ -90,15 +91,15 @@ class Topic(object):
                   'ignore in most text processing.')
             self.stop_words = set()
 
-        # Loop through texts and tokenize: 'doc' and 'titleDoc' are lists of spaCy tokens, with named entities called
+        # Loop through texts and tokenize: 'textDoc' and 'titleDoc' are lists of spaCy tokens, with named entities called
         # recognized and joined. 'textClean' is a string of lemmatized words, excluding stopwords and punctuation.
         # It's used by Doc2Vec.
-        for text_id, text in self.texts.items():
-            text['doc'] = self._tokenize(text['text'])
-            text['titleDoc'] = self._tokenize(text['title'])
-            text['textClean'] = ' '.join([token.text.lower() if token.lemma_ == '-PRON-' else token.lemma_ for
-                                          token in text['doc'] if token.lemma_ not in
-                                          self.stop_words and token.text not in self.punct])
+        for _, row in self.texts.iterrows():
+            row['textDoc'] = self._tokenize(row['text'])
+            row['titleDoc'] = self._tokenize(row['title'])
+            row['textClean'] = ' '.join([token.text.lower() if token.lemma_ == '-PRON-' else token.lemma_ for
+                                         token in row['textDoc'] if token.lemma_ not in
+                                         self.stop_words and token.text not in self.punct])
 
     def _tokenize(self, raw_text):
         """
@@ -172,26 +173,26 @@ class Topic(object):
     def detect_ngram(self, min_topic_count=5, min_text_id_count=4):
         """
         Find all ngrams within our raw text
-        Create ngram counts (absolute and weighted) such that we can find most telling ngrams and know enough to 
+        Create ngram counts (absolute and weighted) such that we can find most telling ngrams and know enough to
         (a) prioritize by topic, (b) tie them back to their underlying topic, (c) highlight in the UI
-        :return: 
+        :return:
         """
-
-        for text_id, text in self.texts.items():
+        for _, row in self.texts.iterrows():
             # single-word topics act a bit different (no zips or comprehensions)
             # store data in self.topics, not zip_grams
-            for word in text['doc']:
+            for word in row['textDoc']:
                 # word_lemma = word.text.lower() if word.lemma_ == '-PRON-' else word.lemma_
 
                 if {word.text}.intersection(self.punct) or {word.lemma_}.intersection(self.stop_words):
                     continue
 
                 if word.pos in self.nouns or word.ent_type in self.entities:
-                    self.increment_topic(word.lemma_, text_id, word.text.lower())
+                    self.increment_topic(word.lemma_, row['textId'], word.text.lower())
 
         # Populate self.ngrams and self.topics
-        for text_id, text in self.texts.items():
-            doc = text['doc']
+        for _, row in self.texts.iterrows():
+            doc = row['textDoc']
+            text_id = row['textId']
 
             # Find pentagrams - ngrams with 5 words
             for ngram in zip(doc, doc[1:], doc[2:], doc[3:], doc[4:]):
